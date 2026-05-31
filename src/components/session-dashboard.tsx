@@ -2,6 +2,15 @@
 
 import { createTRPCClient, httpBatchLink } from "@trpc/client";
 import type { inferRouterOutputs } from "@trpc/server";
+import {
+  Archive,
+  ArchiveRestore,
+  Check,
+  Pencil,
+  Play,
+  Trash2,
+  X,
+} from "lucide-react";
 import type { FormEvent } from "react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
@@ -243,7 +252,7 @@ export function SessionDashboard() {
             </div>
             {continueSession ? (
               <a
-                className="inline-flex min-h-[42px] items-center justify-center rounded-md bg-gray-900 px-4 font-bold text-white hover:bg-gray-800"
+                className="inline-flex min-h-[42px] items-center justify-center rounded-md bg-gray-900 px-4 font-bold !text-white hover:bg-gray-800"
                 href={`/capture?sessionId=${continueSession.id}`}
               >
                 Continue
@@ -309,17 +318,19 @@ export function SessionDashboard() {
                             autoFocus
                           />
                           <button
-                            className="min-h-10 rounded-md bg-gray-900 px-3 text-sm font-semibold text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-60"
+                            className="inline-flex min-h-10 items-center gap-2 rounded-md bg-gray-900 px-3 text-sm font-semibold text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-60"
                             type="submit"
                             disabled={savingId === session.id}
                           >
+                            <Check className="h-4 w-4" aria-hidden="true" />
                             Save
                           </button>
                           <button
-                            className="min-h-10 rounded-md px-3 text-sm font-semibold text-[#475467] hover:bg-[#f2f4f7]"
+                            className="inline-flex min-h-10 items-center gap-2 rounded-md px-3 text-sm font-semibold text-[#475467] hover:bg-[#f2f4f7]"
                             type="button"
                             onClick={() => setEditingId(null)}
                           >
+                            <X className="h-4 w-4" aria-hidden="true" />
                             Cancel
                           </button>
                         </form>
@@ -340,59 +351,77 @@ export function SessionDashboard() {
                         <span>Updated {formatDate(session.updatedAt)}</span>
                       </div>
                     </div>
-                    <div className="flex flex-wrap gap-2 md:justify-end">
+                    <div className="flex flex-wrap items-center gap-1.5 md:justify-end">
                       <a
-                        className="inline-flex min-h-10 items-center justify-center rounded-md bg-gray-900 px-3 font-semibold text-white hover:bg-gray-800"
+                        className="inline-flex min-h-10 items-center justify-center gap-2 rounded-md bg-teal-700 px-3 font-semibold !text-white hover:bg-teal-800"
                         href={`/capture?sessionId=${session.id}`}
                       >
+                        <Play className="h-4 w-4 fill-current" aria-hidden="true" />
                         Resume
                       </a>
                       {editingId === session.id ? null : (
                         <button
-                          className="min-h-10 rounded-md px-3 font-semibold text-[#344054] hover:bg-[#f2f4f7] disabled:cursor-not-allowed disabled:opacity-60"
+                          className="inline-flex h-10 w-10 items-center justify-center rounded-md text-[#475467] hover:bg-[#f2f4f7] hover:text-[#101828] disabled:cursor-not-allowed disabled:opacity-60"
                           type="button"
                           disabled={savingId === session.id}
                           onClick={() => setEditingId(session.id)}
+                          aria-label={`Rename ${session.name}`}
+                          title="Rename"
                         >
-                          Rename
+                          <Pencil className="h-4 w-4" aria-hidden="true" />
                         </button>
                       )}
                       <button
-                        className="min-h-10 rounded-md px-3 font-semibold text-[#344054] hover:bg-[#f2f4f7] disabled:cursor-not-allowed disabled:opacity-60"
+                        className="inline-flex h-10 w-10 items-center justify-center rounded-md text-[#475467] hover:bg-[#f2f4f7] hover:text-[#101828] disabled:cursor-not-allowed disabled:opacity-60"
                         type="button"
                         disabled={savingId === session.id}
                         onClick={() =>
                           void setArchived(session.id, !session.archivedAt)
                         }
+                        aria-label={
+                          session.archivedAt
+                            ? `Unarchive ${session.name}`
+                            : `Archive ${session.name}`
+                        }
+                        title={session.archivedAt ? "Unarchive" : "Archive"}
                       >
-                        {session.archivedAt ? "Unarchive" : "Archive"}
+                        {session.archivedAt ? (
+                          <ArchiveRestore className="h-4 w-4" aria-hidden="true" />
+                        ) : (
+                          <Archive className="h-4 w-4" aria-hidden="true" />
+                        )}
                       </button>
                       {deletePendingId === session.id ? (
                         <>
                           <button
-                            className="min-h-10 rounded-md border border-red-700 bg-red-700 px-3 font-semibold text-white hover:bg-red-800 disabled:cursor-not-allowed disabled:opacity-60"
+                            className="inline-flex min-h-10 items-center gap-2 rounded-md bg-red-700 px-3 font-semibold text-white hover:bg-red-800 disabled:cursor-not-allowed disabled:opacity-60"
                             type="button"
                             disabled={savingId === session.id}
                             onClick={() => void deleteSession(session.id)}
                           >
+                            <Trash2 className="h-4 w-4" aria-hidden="true" />
                             Confirm delete
                           </button>
                           <button
-                            className="min-h-10 rounded-md border border-[#b8c2d2] px-3 font-semibold text-[#344054] hover:bg-[#f2f4f7]"
+                            className="inline-flex h-10 w-10 items-center justify-center rounded-md text-[#475467] hover:bg-[#f2f4f7] hover:text-[#101828]"
                             type="button"
                             onClick={() => setDeletePendingId(null)}
+                            aria-label="Cancel delete"
+                            title="Cancel"
                           >
-                            Cancel
+                            <X className="h-4 w-4" aria-hidden="true" />
                           </button>
                         </>
                       ) : (
                         <button
-                          className="min-h-10 rounded-md px-3 font-semibold text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
+                          className="inline-flex h-10 w-10 items-center justify-center rounded-md text-red-600 hover:bg-red-50 hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-60"
                           type="button"
                           disabled={savingId === session.id}
                           onClick={() => setDeletePendingId(session.id)}
+                          aria-label={`Delete ${session.name}`}
+                          title="Delete"
                         >
-                          Delete
+                          <Trash2 className="h-4 w-4" aria-hidden="true" />
                         </button>
                       )}
                     </div>
