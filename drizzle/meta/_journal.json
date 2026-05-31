@@ -8,6 +8,13 @@
       "when": 1740700000000,
       "tag": "0000_initial_app_meta",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1780187949710,
+      "tag": "0001_best_frames",
+      "breakpoints": true
     }
   ]
 }

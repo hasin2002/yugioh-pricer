@@ -19,6 +19,14 @@ export default function Home() {
           <ul className="grid list-none gap-2 p-0">
             <li>
               <a
+                className="block rounded-md px-3 py-2.5 text-gray-300 hover:bg-gray-800 hover:text-white"
+                href="/capture"
+              >
+                Capture Client
+              </a>
+            </li>
+            <li>
+              <a
                 className="block rounded-md bg-gray-800 px-3 py-2.5 text-white"
                 href="/"
               >
