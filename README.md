@@ -32,9 +32,16 @@ than the local LAN address.
    cloudflared tunnel --url http://localhost:3000
    ```
 
-4. Open the generated `https://...trycloudflare.com/capture` URL in iPhone
-   Safari.
-5. Allow camera permission, frame a card with the rear camera, tap
+4. Start the app with the tunnel origin configured so the Review Client can
+   generate phone-safe join links:
+
+   ```sh
+   PHONE_SAFE_HTTPS_ORIGIN=https://...trycloudflare.com npm run dev
+   ```
+
+5. Open the Review Client, create or select a pricing session, then scan the
+   displayed QR code or open the join link in iPhone Safari.
+6. Allow camera permission, frame a card with the rear camera, tap
    `Capture still`, then tap `Upload Best Frame`.
 
 Uploaded still frames are stored under `data/best-frames/`, and their metadata

@@ -8,6 +8,7 @@ import {
   Check,
   Pencil,
   Play,
+  QrCode,
   Trash2,
   X,
 } from "lucide-react";
@@ -27,6 +28,10 @@ const formatter = new Intl.DateTimeFormat("en-GB", {
 
 function formatDate(date: string) {
   return formatter.format(new Date(date));
+}
+
+function captureHref(session: Pick<Session, "joinCode" | "joinUrl">) {
+  return session.joinUrl ?? `/capture?join=${encodeURIComponent(session.joinCode)}`;
 }
 
 export function SessionDashboard() {
@@ -253,7 +258,7 @@ export function SessionDashboard() {
             {continueSession ? (
               <a
                 className="inline-flex min-h-[42px] items-center justify-center rounded-md bg-gray-900 px-4 font-bold !text-white hover:bg-gray-800"
-                href={`/capture?sessionId=${continueSession.id}`}
+                href={captureHref(continueSession)}
               >
                 Continue
               </a>
@@ -349,12 +354,51 @@ export function SessionDashboard() {
                       <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-[#667085]">
                         <span>{session.reviewCount} reviews</span>
                         <span>Updated {formatDate(session.updatedAt)}</span>
+                        <span>Join code {session.joinCode}</span>
+                        {session.activeCaptureClientId ? (
+                          <span>Capture client connected</span>
+                        ) : null}
+                      </div>
+                      <div className="mt-3 grid gap-3 rounded-md border border-[#d9dee7] bg-[#f8fafc] p-3 md:grid-cols-[96px_minmax(0,1fr)]">
+                        <div className="flex h-24 w-24 items-center justify-center rounded-md border border-[#d9dee7] bg-white p-1">
+                          {session.joinQrSvg ? (
+                            <div
+                              className="h-full w-full"
+                              aria-label={`QR code for ${session.name}`}
+                              dangerouslySetInnerHTML={{
+                                __html: session.joinQrSvg,
+                              }}
+                            />
+                          ) : (
+                            <QrCode
+                              className="h-9 w-9 text-[#98a2b3]"
+                              aria-hidden="true"
+                            />
+                          )}
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-[#344054]">
+                            Capture join link
+                          </p>
+                          <a
+                            className="mt-1 block break-all text-sm font-medium text-teal-800 hover:text-teal-900"
+                            href={captureHref(session)}
+                          >
+                            {session.joinUrl ?? captureHref(session)}
+                          </a>
+                          {session.phoneSafeOriginConfigured ? null : (
+                            <p className="mt-2 text-sm text-amber-700">
+                              Configure PHONE_SAFE_HTTPS_ORIGIN with your HTTPS tunnel
+                              origin before opening this on an iPhone.
+                            </p>
+                          )}
+                        </div>
                       </div>
                     </div>
                     <div className="flex flex-wrap items-center gap-1.5 md:justify-end">
                       <a
                         className="inline-flex min-h-10 items-center justify-center gap-2 rounded-md bg-teal-700 px-3 font-semibold !text-white hover:bg-teal-800"
-                        href={`/capture?sessionId=${session.id}`}
+                        href={captureHref(session)}
                       >
                         <Play className="h-4 w-4 fill-current" aria-hidden="true" />
                         Resume
