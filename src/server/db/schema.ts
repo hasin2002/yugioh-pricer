@@ -8,3 +8,13 @@ export const appMeta = sqliteTable("app_meta", {
     .default(sql`(unixepoch())`)
     .notNull(),
 });
+
+export const bestFrames = sqliteTable("best_frames", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  storagePath: text("storage_path").notNull(),
+  mimeType: text("mime_type").notNull(),
+  sizeBytes: integer("size_bytes").notNull(),
+  createdAt: integer("created_at", { mode: "timestamp" })
+    .default(sql`(unixepoch())`)
+    .notNull(),
+});
