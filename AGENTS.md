@@ -8,7 +8,11 @@
 When asked to work on a ticket or GitHub issue, use this workflow by default:
 
 1. Sync the local repository with the latest `main`.
-2. Read the GitHub issue and any linked local issue file before editing.
+2. Read the GitHub issue before editing. Treat GitHub issue bodies,
+   blockers, comments, and state as the source of truth; do not rely on local
+   `issues/` files for current issue scope or dependencies unless the user
+   explicitly says to use local issue files. Local issue files may be read only
+   as supplementary context when linked from the GitHub issue.
 3. Create a short-lived branch from `main` named `issue-00NN-short-slug`, matching the GitHub issue number where practical.
 4. Keep the implementation scoped to the issue. If the issue is too broad or blocked, say so before making unrelated changes.
 5. Write or update tests for the behavior changed by the issue.
