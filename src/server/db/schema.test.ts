@@ -15,5 +15,9 @@ describe("database schema", () => {
     expect(pricingSessions[Symbol.for("drizzle:Name")]).toBe(
       "pricing_sessions",
     );
+    expect(pricingSessions.joinCode.name).toBe("join_code");
+    expect(pricingSessions.activeCaptureClientId.name).toBe(
+      "active_capture_client_id",
+    );
   });
 });

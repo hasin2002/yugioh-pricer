@@ -1,6 +1,8 @@
 import { publicProcedure, router } from "@/server/api/trpc";
 import { pricingSessions } from "@/server/db/schema";
 import { desc, eq, isNull } from "drizzle-orm";
+import QRCode from "qrcode";
+import { randomBytes } from "node:crypto";
 import { z } from "zod";
 
 const healthInputSchema = z.object({
@@ -15,6 +17,12 @@ const renameSessionInputSchema = sessionIdInputSchema.extend({
   name: z.string().trim().min(1).max(80),
 });
 
+const joinSessionInputSchema = z.object({
+  joinCode: z.string().trim().min(1),
+  clientId: z.string().trim().min(8).max(128),
+  replaceExisting: z.boolean().default(false),
+});
+
 function automaticSessionName(now = new Date()) {
   const formatter = new Intl.DateTimeFormat("en-GB", {
     dateStyle: "medium",
@@ -24,9 +32,70 @@ function automaticSessionName(now = new Date()) {
   return `Pricing Session ${formatter.format(now)}`;
 }
 
+function createJoinCode() {
+  return randomBytes(5).toString("base64url").toUpperCase();
+}
+
+function configuredPhoneSafeOrigin() {
+  const origin = process.env.PHONE_SAFE_HTTPS_ORIGIN?.trim();
+
+  if (!origin) {
+    return null;
+  }
+
+  try {
+    const url = new URL(origin);
+
+    if (url.protocol !== "https:") {
+      return null;
+    }
+
+    url.pathname = "";
+    url.search = "";
+    url.hash = "";
+
+    return url.toString().replace(/\/$/, "");
+  } catch {
+    return null;
+  }
+}
+
+function joinUrlFor(joinCode: string) {
+  const origin = configuredPhoneSafeOrigin();
+
+  return origin ? `${origin}/capture?join=${encodeURIComponent(joinCode)}` : null;
+}
+
+function qrSvgFor(value: string) {
+  const qrCode = QRCode.create(value, { errorCorrectionLevel: "M" });
+  const quietZone = 4;
+  const size = qrCode.modules.size + quietZone * 2;
+  const rects = Array.from(qrCode.modules.data)
+    .map((enabled, index) => {
+      if (!enabled) {
+        return "";
+      }
+
+      const x = (index % qrCode.modules.size) + quietZone;
+      const y = Math.floor(index / qrCode.modules.size) + quietZone;
+
+      return `<rect x="${x}" y="${y}" width="1" height="1"/>`;
+    })
+    .join("");
+
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${size} ${size}" shape-rendering="crispEdges"><path fill="#fff" d="M0 0h${size}v${size}H0z"/><g fill="#151923">${rects}</g></svg>`;
+}
+
 function serializeSession(session: typeof pricingSessions.$inferSelect) {
+  const joinUrl = joinUrlFor(session.joinCode);
+
   return {
     ...session,
+    joinUrl,
+    joinQrSvg: joinUrl ? qrSvgFor(joinUrl) : null,
+    phoneSafeOriginConfigured: joinUrl !== null,
+    activeCaptureClientJoinedAt:
+      session.activeCaptureClientJoinedAt?.toISOString() ?? null,
     archivedAt: session.archivedAt?.toISOString() ?? null,
     createdAt: session.createdAt.toISOString(),
     updatedAt: session.updatedAt.toISOString(),
@@ -92,6 +161,7 @@ export const appRouter = router({
         .insert(pricingSessions)
         .values({
           name: automaticSessionName(),
+          joinCode: createJoinCode(),
         })
         .returning();
 
@@ -139,6 +209,52 @@ export const appRouter = router({
           .returning({ id: pricingSessions.id });
 
         return { deleted: deletedSessions.length > 0 };
+      }),
+  }),
+  capture: router({
+    join: publicProcedure
+      .input(joinSessionInputSchema)
+      .mutation(async ({ ctx, input }) => {
+        const [session] = await ctx.db
+          .select()
+          .from(pricingSessions)
+          .where(eq(pricingSessions.joinCode, input.joinCode));
+
+        if (!session) {
+          return {
+            status: "not_found" as const,
+            session: null,
+            activeCaptureClientId: null,
+          };
+        }
+
+        if (
+          session.activeCaptureClientId &&
+          session.activeCaptureClientId !== input.clientId &&
+          !input.replaceExisting
+        ) {
+          return {
+            status: "already_claimed" as const,
+            session: serializeSession(session),
+            activeCaptureClientId: session.activeCaptureClientId,
+          };
+        }
+
+        const [updatedSession] = await ctx.db
+          .update(pricingSessions)
+          .set({
+            activeCaptureClientId: input.clientId,
+            activeCaptureClientJoinedAt: new Date(),
+            updatedAt: new Date(),
+          })
+          .where(eq(pricingSessions.id, session.id))
+          .returning();
+
+        return {
+          status: "joined" as const,
+          session: serializeSession(updatedSession),
+          activeCaptureClientId: updatedSession.activeCaptureClientId,
+        };
       }),
   }),
 });

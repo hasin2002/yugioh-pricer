@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import Database from "better-sqlite3";
 import { drizzle } from "drizzle-orm/better-sqlite3";
 
@@ -12,6 +12,9 @@ function createTestCaller() {
     CREATE TABLE pricing_sessions (
       id integer PRIMARY KEY AUTOINCREMENT NOT NULL,
       name text NOT NULL,
+      join_code text NOT NULL UNIQUE,
+      active_capture_client_id text,
+      active_capture_client_joined_at integer,
       archived_at integer,
       review_count integer DEFAULT 0 NOT NULL,
       created_at integer DEFAULT (unixepoch()) NOT NULL,
@@ -29,6 +32,16 @@ function createTestCaller() {
 }
 
 describe("appRouter", () => {
+  const originalPhoneSafeOrigin = process.env.PHONE_SAFE_HTTPS_ORIGIN;
+
+  afterEach(() => {
+    if (originalPhoneSafeOrigin === undefined) {
+      delete process.env.PHONE_SAFE_HTTPS_ORIGIN;
+    } else {
+      process.env.PHONE_SAFE_HTTPS_ORIGIN = originalPhoneSafeOrigin;
+    }
+  });
+
   it("responds on the typed health path", async () => {
     const { caller, close } = createTestCaller();
 
@@ -72,12 +85,17 @@ describe("appRouter", () => {
     try {
       const [activeSession] = await db
         .insert(schema.pricingSessions)
-        .values({ name: "Active Review", reviewCount: 3 })
+        .values({
+          name: "Active Review",
+          joinCode: "ACTIVE01",
+          reviewCount: 3,
+        })
         .returning();
       const [archivedSession] = await db
         .insert(schema.pricingSessions)
         .values({
           name: "Archived Review",
+          joinCode: "ARCHIVED01",
           reviewCount: 8,
           archivedAt: new Date(),
         })
@@ -124,6 +142,94 @@ describe("appRouter", () => {
       await expect(caller.sessions.list({ includeArchived: true })).resolves.toEqual(
         [],
       );
+    } finally {
+      close();
+    }
+  });
+
+  it("exposes HTTPS join links and QR codes when the phone-safe origin is configured", async () => {
+    process.env.PHONE_SAFE_HTTPS_ORIGIN = "https://capture.example.test/path";
+    const { caller, close } = createTestCaller();
+
+    try {
+      const session = await caller.sessions.create();
+
+      expect(session.joinCode).toMatch(/^[A-Z0-9_-]+$/);
+      expect(session.joinUrl).toBe(
+        `https://capture.example.test/capture?join=${session.joinCode}`,
+      );
+      expect(session.joinQrSvg).toContain("<svg");
+      expect(session.phoneSafeOriginConfigured).toBe(true);
+    } finally {
+      close();
+    }
+  });
+
+  it("warns callers when no HTTPS phone-safe origin is configured", async () => {
+    delete process.env.PHONE_SAFE_HTTPS_ORIGIN;
+    const { caller, close } = createTestCaller();
+
+    try {
+      const session = await caller.sessions.create();
+
+      expect(session.joinUrl).toBeNull();
+      expect(session.joinQrSvg).toBeNull();
+      expect(session.phoneSafeOriginConfigured).toBe(false);
+    } finally {
+      close();
+    }
+  });
+
+  it("binds a join code to one pricing session and one active capture client", async () => {
+    const { caller, close } = createTestCaller();
+
+    try {
+      const session = await caller.sessions.create();
+      const firstJoin = await caller.capture.join({
+        joinCode: session.joinCode,
+        clientId: "client-one",
+      });
+
+      expect(firstJoin.status).toBe("joined");
+      expect(firstJoin.session?.id).toBe(session.id);
+      expect(firstJoin.activeCaptureClientId).toBe("client-one");
+
+      const rejectedJoin = await caller.capture.join({
+        joinCode: session.joinCode,
+        clientId: "client-two",
+      });
+
+      expect(rejectedJoin.status).toBe("already_claimed");
+      expect(rejectedJoin.session?.id).toBe(session.id);
+      expect(rejectedJoin.activeCaptureClientId).toBe("client-one");
+
+      const replacementJoin = await caller.capture.join({
+        joinCode: session.joinCode,
+        clientId: "client-two",
+        replaceExisting: true,
+      });
+
+      expect(replacementJoin.status).toBe("joined");
+      expect(replacementJoin.activeCaptureClientId).toBe("client-two");
+    } finally {
+      close();
+    }
+  });
+
+  it("returns archived session state when a capture client joins", async () => {
+    const { caller, close } = createTestCaller();
+
+    try {
+      const session = await caller.sessions.create();
+      await caller.sessions.archive({ id: session.id });
+
+      const joined = await caller.capture.join({
+        joinCode: session.joinCode,
+        clientId: "archived-client",
+      });
+
+      expect(joined.status).toBe("joined");
+      expect(joined.session?.archivedAt).not.toBeNull();
     } finally {
       close();
     }

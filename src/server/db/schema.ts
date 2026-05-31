@@ -22,6 +22,11 @@ export const bestFrames = sqliteTable("best_frames", {
 export const pricingSessions = sqliteTable("pricing_sessions", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   name: text("name").notNull(),
+  joinCode: text("join_code").notNull().unique(),
+  activeCaptureClientId: text("active_capture_client_id"),
+  activeCaptureClientJoinedAt: integer("active_capture_client_joined_at", {
+    mode: "timestamp",
+  }),
   archivedAt: integer("archived_at", { mode: "timestamp" }),
   reviewCount: integer("review_count").default(0).notNull(),
   createdAt: integer("created_at", { mode: "timestamp" })
