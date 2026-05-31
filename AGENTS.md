@@ -27,6 +27,11 @@ When manual testing is useful, explain it in plain language with:
 - what the tester should expect to see
 - any device, browser, tunnel, or setup requirement
 
+Before finishing issue work, ask the user to check over the PR when manual or
+product review is useful. If the user does not approve, continue making scoped
+changes and asking for review until they do approve. Once the user approves,
+merge the PR into `main` and mark the related issue as completed.
+
 Do not work directly on `main` for issue implementation unless explicitly asked.
 
 # Pull Request Follow-Up Workflow
