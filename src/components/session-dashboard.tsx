@@ -56,6 +56,24 @@ function formatDate(date: string) {
   return formatter.format(new Date(date));
 }
 
+function formatSnapshotAmount(item: SessionItem) {
+  const snapshot = item.latestPriceSnapshot;
+
+  if (
+    !snapshot ||
+    snapshot.status !== "priced" ||
+    !snapshot.observedAmount ||
+    !snapshot.currency
+  ) {
+    return null;
+  }
+
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: snapshot.currency,
+  }).format(Number(snapshot.observedAmount));
+}
+
 function captureHref(session: Pick<Session, "joinCode" | "joinUrl">) {
   return session.joinUrl ?? `/capture?join=${encodeURIComponent(session.joinCode)}`;
 }
@@ -96,6 +114,9 @@ export function SessionDashboard() {
   const [manualSuggestionsOpen, setManualSuggestionsOpen] = useState(false);
   const [raritySuggestionsOpen, setRaritySuggestionsOpen] = useState(false);
   const [manualSaving, setManualSaving] = useState(false);
+  const [pricingRefreshingId, setPricingRefreshingId] = useState<number | null>(
+    null,
+  );
   const [manualForm, setManualForm] = useState<ManualEntryForm>(
     emptyManualEntryForm,
   );
@@ -201,6 +222,16 @@ export function SessionDashboard() {
   async function loadSessionItems(sessionId: number) {
     const items = await trpc.sessions.items.query({ id: sessionId });
     setSessionItems((current) => ({ ...current, [sessionId]: items }));
+  }
+
+  async function refreshItemPricing(sessionId: number, itemId: number) {
+    setPricingRefreshingId(itemId);
+    try {
+      await trpc.sessions.refreshItemPricing.mutate({ id: itemId });
+      await Promise.all([loadSessionItems(sessionId), refresh()]);
+    } finally {
+      setPricingRefreshingId(null);
+    }
   }
 
   async function openManualEntry(sessionId: number) {
@@ -632,6 +663,8 @@ export function SessionDashboard() {
                       )}
                       <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-[#667085]">
                         <span>{session.reviewCount} reviews</span>
+                        <span>{session.sessionEstimatedValue} estimated</span>
+                        <span>{session.unpricedItemCount} unpriced</span>
                         <span>Updated {formatDate(session.updatedAt)}</span>
                         <span>Join code {session.joinCode}</span>
                         {session.activeCaptureClientId ? (
@@ -1056,16 +1089,48 @@ export function SessionDashboard() {
                           <ul className="grid gap-2 p-0">
                             {(sessionItems[session.id] ?? []).map((item) => (
                               <li
-                                className="grid gap-1 rounded-md border border-[#e4e7ec] px-3 py-2 text-sm md:grid-cols-[minmax(0,1fr)_auto]"
+                                className="grid gap-2 rounded-md border border-[#e4e7ec] px-3 py-2 text-sm md:grid-cols-[minmax(0,1fr)_auto]"
                                 key={item.id}
                               >
-                                <span className="min-w-0 truncate font-semibold">
-                                  {item.quantity}x {item.cardName}
-                                </span>
-                                <span className="text-[#667085]">
-                                  {item.setCode} · {item.rarity} · {item.edition} ·{" "}
-                                  {item.condition} · {item.language}
-                                </span>
+                                <div className="min-w-0">
+                                  <span className="block truncate font-semibold">
+                                    {item.quantity}x {item.cardName}
+                                  </span>
+                                  <span className="text-[#667085]">
+                                    {item.setCode} · {item.rarity} · {item.edition} ·{" "}
+                                    {item.condition} · {item.language}
+                                  </span>
+                                </div>
+                                <div className="flex items-center gap-2 md:justify-end">
+                                  {formatSnapshotAmount(item) ? (
+                                    <span className="rounded-full bg-emerald-50 px-2 py-1 text-xs font-bold text-emerald-700">
+                                      {formatSnapshotAmount(item)}
+                                    </span>
+                                  ) : (
+                                    <span className="rounded-full bg-amber-50 px-2 py-1 text-xs font-bold text-amber-700">
+                                      {item.pricingIssue ?? "No price found"}
+                                    </span>
+                                  )}
+                                  <button
+                                    className="inline-flex h-8 w-8 items-center justify-center rounded-md text-[#475467] hover:bg-[#f2f4f7] disabled:cursor-not-allowed disabled:opacity-60"
+                                    type="button"
+                                    disabled={pricingRefreshingId === item.id}
+                                    onClick={() =>
+                                      void refreshItemPricing(session.id, item.id)
+                                    }
+                                    aria-label={`Refresh pricing for ${item.cardName}`}
+                                    title="Refresh pricing"
+                                  >
+                                    <RefreshCw
+                                      className={`h-4 w-4 ${
+                                        pricingRefreshingId === item.id
+                                          ? "animate-spin"
+                                          : ""
+                                      }`}
+                                      aria-hidden="true"
+                                    />
+                                  </button>
+                                </div>
                               </li>
                             ))}
                           </ul>

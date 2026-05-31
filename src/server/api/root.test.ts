@@ -75,6 +75,17 @@ function createTestCaller() {
       created_at integer DEFAULT (unixepoch()) NOT NULL,
       updated_at integer DEFAULT (unixepoch()) NOT NULL
     );
+
+    CREATE TABLE price_snapshots (
+      id integer PRIMARY KEY AUTOINCREMENT NOT NULL,
+      session_item_id integer NOT NULL REFERENCES session_items(id) ON DELETE cascade,
+      status text NOT NULL,
+      observed_amount text,
+      source text NOT NULL,
+      currency text,
+      observed_at integer NOT NULL,
+      created_at integer DEFAULT (unixepoch()) NOT NULL
+    );
   `);
 
   const db = drizzle(sqlite, { schema });
@@ -83,6 +94,24 @@ function createTestCaller() {
     caller: appRouter.createCaller({ db }),
     db,
     close: () => sqlite.close(),
+  };
+}
+
+function mockYgoPriceResponse(
+  payload: unknown,
+  init: {
+    status?: number;
+  } = {},
+) {
+  const originalFetch = globalThis.fetch;
+
+  globalThis.fetch = async () =>
+    new Response(JSON.stringify(payload), {
+      status: init.status ?? 200,
+    });
+
+  return () => {
+    globalThis.fetch = originalFetch;
   };
 }
 
@@ -180,6 +209,19 @@ describe("appRouter", () => {
   });
 
   it("adds manual items to a pricing session without a best frame", async () => {
+    const restoreFetch = mockYgoPriceResponse({
+      data: [
+        {
+          id: 46986414,
+          card_sets: [
+            {
+              set_code: "LOB-005",
+              set_price: "12.34",
+            },
+          ],
+        },
+      ],
+    });
     const { caller, close } = createTestCaller();
 
     try {
@@ -197,6 +239,7 @@ describe("appRouter", () => {
       });
       const items = await caller.sessions.items({ id: session.id });
       const sessions = await caller.sessions.list();
+      const summary = await caller.sessions.summary();
 
       expect(item).toMatchObject({
         sessionId: session.id,
@@ -211,14 +254,25 @@ describe("appRouter", () => {
         condition: "Near Mint",
         quantity: 2,
       });
+      expect(item.latestPriceSnapshot).toMatchObject({
+        status: "priced",
+        observedAmount: "12.34",
+        source: "ygoprodeck.card_sets.set_price",
+        currency: "USD",
+      });
       expect(items).toHaveLength(1);
+      expect(items[0]?.latestPriceSnapshot?.observedAmount).toBe("12.34");
       expect(sessions[0]?.reviewCount).toBe(2);
+      expect(sessions[0]?.sessionEstimatedValue).toBe("$24.68");
+      expect(summary.collectionEstimatedValue).toBe("$24.68");
     } finally {
+      restoreFetch();
       close();
     }
   });
 
   it("uses manual item defaults for printing identity fields", async () => {
+    const restoreFetch = mockYgoPriceResponse({ data: [{ id: 89631139 }] });
     const { caller, close } = createTestCaller();
 
     try {
@@ -237,6 +291,140 @@ describe("appRouter", () => {
         condition: "Mint",
         quantity: 1,
       });
+      expect(item.latestPriceSnapshot?.status).toBe("no_price_found");
+      expect(item.pricingIssue).toBe("No price found");
+    } finally {
+      restoreFetch();
+      close();
+    }
+  });
+
+  it("stores pricing unavailable as a distinct pricing issue", async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async () => new Response("unavailable", { status: 503 });
+    const { caller, close } = createTestCaller();
+
+    try {
+      const session = await caller.sessions.create();
+      const item = await caller.sessions.addManualItem({
+        id: session.id,
+        cardName: "Dark Magician",
+        setCode: "LOB-005",
+        passcode: "46986414",
+        rarity: "Ultra Rare",
+      });
+      const sessions = await caller.sessions.list();
+
+      expect(item.latestPriceSnapshot).toMatchObject({
+        status: "pricing_unavailable",
+        observedAmount: null,
+        source: "ygoprodeck",
+        currency: null,
+      });
+      expect(item.pricingIssue).toBe("Pricing unavailable");
+      expect(sessions[0]?.sessionEstimatedValue).toBe("$0.00");
+      expect(sessions[0]?.unpricedItemCount).toBe(1);
+      expect(sessions[0]?.pricingIssueCount).toBe(1);
+    } finally {
+      globalThis.fetch = originalFetch;
+      close();
+    }
+  });
+
+  it("refreshes item pricing with a fresh YGOPRODeck lookup", async () => {
+    let price = "1.00";
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async () =>
+      new Response(
+        JSON.stringify({
+          data: [
+            {
+              id: 46986414,
+              card_sets: [
+                {
+                  set_code: "LOB-005",
+                  set_price: price,
+                },
+              ],
+            },
+          ],
+        }),
+      );
+    const { caller, close } = createTestCaller();
+
+    try {
+      const session = await caller.sessions.create();
+      const item = await caller.sessions.addManualItem({
+        id: session.id,
+        cardName: "Dark Magician",
+        setCode: "LOB-005",
+        passcode: "46986414",
+        rarity: "Ultra Rare",
+      });
+
+      price = "2.50";
+      const refreshed = await caller.sessions.refreshItemPricing({ id: item.id });
+      const items = await caller.sessions.items({ id: session.id });
+
+      expect(refreshed?.latestPriceSnapshot?.observedAmount).toBe("2.50");
+      expect(items[0]?.latestPriceSnapshot?.observedAmount).toBe("2.50");
+    } finally {
+      globalThis.fetch = originalFetch;
+      close();
+    }
+  });
+
+  it("excludes unpriced review items from session estimated value", async () => {
+    const { caller, db, close } = createTestCaller();
+
+    try {
+      const session = await caller.sessions.create();
+      const [pricedItem] = await db
+        .insert(schema.sessionItems)
+        .values({
+          sessionId: session.id,
+          entrySource: "manual",
+          cardName: "Dark Magician",
+          setCode: "LOB-005",
+          passcode: "46986414",
+          rarity: "Ultra Rare",
+          edition: "1st Edition",
+          language: "English",
+          condition: "Mint",
+          quantity: 2,
+        })
+        .returning();
+      await db.insert(schema.sessionItems).values({
+        sessionId: session.id,
+        entrySource: "manual",
+        cardName: "Blue-Eyes White Dragon",
+        setCode: "SDK-001",
+        passcode: "89631139",
+        rarity: "Ultra Rare",
+        edition: "1st Edition",
+        language: "English",
+        condition: "Mint",
+        quantity: 3,
+      });
+      await db.insert(schema.priceSnapshots).values({
+        sessionItemId: pricedItem.id,
+        status: "priced",
+        observedAmount: "5.00",
+        source: "ygoprodeck.card_sets.set_price",
+        currency: "USD",
+        observedAt: new Date(),
+      });
+
+      const [listedSession] = await caller.sessions.list();
+      const items = await caller.sessions.items({ id: session.id });
+
+      expect(listedSession?.sessionEstimatedValue).toBe("$10.00");
+      expect(listedSession?.pricedItemCount).toBe(2);
+      expect(listedSession?.unpricedItemCount).toBe(3);
+      expect(
+        items.find((item) => item.cardName === "Blue-Eyes White Dragon")
+          ?.pricingIssue,
+      ).toBe("No price found");
     } finally {
       close();
     }

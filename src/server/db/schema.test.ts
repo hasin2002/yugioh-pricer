@@ -5,6 +5,7 @@ import {
   bestFrames,
   cardMetadataCards,
   cardMetadataPrintings,
+  priceSnapshots,
   pricingSessions,
   sessionItems,
 } from "@/server/db/schema";
@@ -44,5 +45,13 @@ describe("database schema", () => {
     expect(sessionItems.sessionId.name).toBe("session_id");
     expect(sessionItems.bestFrameId.name).toBe("best_frame_id");
     expect(sessionItems.entrySource.name).toBe("entry_source");
+  });
+
+  it("defines price snapshots for session items", () => {
+    expect(priceSnapshots[Symbol.for("drizzle:Name")]).toBe("price_snapshots");
+    expect(priceSnapshots.sessionItemId.name).toBe("session_item_id");
+    expect(priceSnapshots.observedAmount.name).toBe("observed_amount");
+    expect(priceSnapshots.currency.name).toBe("currency");
+    expect(priceSnapshots.observedAt.name).toBe("observed_at");
   });
 });
