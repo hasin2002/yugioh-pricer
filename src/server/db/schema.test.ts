@@ -6,6 +6,7 @@ import {
   cardMetadataCards,
   cardMetadataPrintings,
   pricingSessions,
+  sessionItems,
 } from "@/server/db/schema";
 
 describe("database schema", () => {
@@ -36,5 +37,12 @@ describe("database schema", () => {
     );
     expect(cardMetadataCards.passcode.name).toBe("passcode");
     expect(cardMetadataPrintings.setCode.name).toBe("set_code");
+  });
+
+  it("defines session items with optional best frame evidence", () => {
+    expect(sessionItems[Symbol.for("drizzle:Name")]).toBe("session_items");
+    expect(sessionItems.sessionId.name).toBe("session_id");
+    expect(sessionItems.bestFrameId.name).toBe("best_frame_id");
+    expect(sessionItems.entrySource.name).toBe("entry_source");
   });
 });
