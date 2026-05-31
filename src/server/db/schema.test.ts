@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 
-import { appMeta, bestFrames, pricingSessions } from "@/server/db/schema";
+import {
+  appMeta,
+  bestFrames,
+  cardMetadataCards,
+  cardMetadataPrintings,
+  pricingSessions,
+} from "@/server/db/schema";
 
 describe("database schema", () => {
   it("defines the initial app metadata table", () => {
@@ -19,5 +25,16 @@ describe("database schema", () => {
     expect(pricingSessions.activeCaptureClientId.name).toBe(
       "active_capture_client_id",
     );
+  });
+
+  it("defines card metadata cache tables", () => {
+    expect(cardMetadataCards[Symbol.for("drizzle:Name")]).toBe(
+      "card_metadata_cards",
+    );
+    expect(cardMetadataPrintings[Symbol.for("drizzle:Name")]).toBe(
+      "card_metadata_printings",
+    );
+    expect(cardMetadataCards.passcode.name).toBe("passcode");
+    expect(cardMetadataPrintings.setCode.name).toBe("set_code");
   });
 });

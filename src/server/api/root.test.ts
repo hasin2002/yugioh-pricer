@@ -20,6 +20,36 @@ function createTestCaller() {
       created_at integer DEFAULT (unixepoch()) NOT NULL,
       updated_at integer DEFAULT (unixepoch()) NOT NULL
     );
+
+    CREATE TABLE app_meta (
+      key text PRIMARY KEY NOT NULL,
+      value text NOT NULL,
+      updated_at integer DEFAULT (unixepoch()) NOT NULL
+    );
+
+    CREATE TABLE card_metadata_cards (
+      passcode text PRIMARY KEY NOT NULL,
+      name text NOT NULL,
+      normalized_name text NOT NULL,
+      card_type text NOT NULL,
+      frame_type text,
+      description text,
+      race text,
+      attribute text,
+      image_url text,
+      updated_at integer DEFAULT (unixepoch()) NOT NULL
+    );
+
+    CREATE TABLE card_metadata_printings (
+      id integer PRIMARY KEY AUTOINCREMENT NOT NULL,
+      passcode text NOT NULL REFERENCES card_metadata_cards(passcode) ON DELETE cascade,
+      set_name text NOT NULL,
+      set_code text NOT NULL UNIQUE,
+      rarity text,
+      rarity_code text,
+      source_set_price text,
+      updated_at integer DEFAULT (unixepoch()) NOT NULL
+    );
   `);
 
   const db = drizzle(sqlite, { schema });
@@ -52,6 +82,51 @@ describe("appRouter", () => {
         message: "Typed API path ready",
       });
     } finally {
+      close();
+    }
+  });
+
+  it("refreshes and searches card metadata without satisfying pricing", async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async () =>
+      new Response(
+        JSON.stringify({
+          data: [
+            {
+              id: 46986414,
+              name: "Dark Magician",
+              type: "Normal Monster",
+              frameType: "normal",
+              card_sets: [
+                {
+                  set_name: "Legend of Blue Eyes White Dragon",
+                  set_code: "LOB-005",
+                  set_rarity: "Ultra Rare",
+                },
+              ],
+            },
+          ],
+        }),
+      );
+    const { caller, close } = createTestCaller();
+
+    try {
+      const status = await caller.cards.refreshMetadata();
+      const results = await caller.cards.searchMetadata({ query: "LOB-005" });
+
+      expect(status.cardCount).toBe(1);
+      expect(status.printingCount).toBe(1);
+      expect(results).toEqual([
+        expect.objectContaining({
+          name: "Dark Magician",
+          passcode: "46986414",
+          setCode: "LOB-005",
+          metadataOnly: true,
+          pricingStatus: "requires_pricing",
+        }),
+      ]);
+    } finally {
+      globalThis.fetch = originalFetch;
       close();
     }
   });
