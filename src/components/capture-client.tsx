@@ -6,6 +6,15 @@ import { AlertTriangle } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { AppRouter } from "@/server/api/root";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 
 type RouterOutputs = inferRouterOutputs<AppRouter>;
 type JoinedSession = NonNullable<
@@ -254,9 +263,9 @@ export function CaptureClient() {
   }
 
   return (
-    <section className="min-h-screen bg-[#f6f7f9] p-4 text-[#151923] sm:p-6">
+    <section className="min-h-screen bg-muted/40 p-4 text-foreground sm:p-6">
       <div className="mx-auto grid max-w-5xl gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
-        <div className="overflow-hidden rounded-lg border border-[#d9dee7] bg-black">
+        <div className="overflow-hidden rounded-lg border bg-black">
           <video
             ref={videoRef}
             className="aspect-[3/4] w-full bg-black object-cover sm:aspect-video"
@@ -266,68 +275,78 @@ export function CaptureClient() {
           <canvas ref={canvasRef} className="hidden" />
         </div>
 
-        <aside className="rounded-lg border border-[#d9dee7] bg-white p-4">
-          <p className="mb-1 text-xs font-bold uppercase text-[#667085]">Capture Client</p>
-          <h1 className="mb-4 text-2xl font-bold leading-tight">
-            {joinedSession?.name ?? "Join pricing session"}
-          </h1>
+        <Card className="rounded-lg">
+          <CardHeader>
+            <CardDescription className="text-xs font-bold uppercase">
+              Capture Client
+            </CardDescription>
+            <CardTitle className="text-2xl">
+              {joinedSession?.name ?? "Join pricing session"}
+            </CardTitle>
+          </CardHeader>
 
-          <div className="mb-4 rounded-md border border-[#d9dee7] bg-[#f6f7f9] p-3">
-            <p className="text-sm font-bold" data-state={captureState}>
-              {captureStateLabel(captureState)}
-            </p>
-            <p className="mt-1 text-sm text-[#667085]">{message}</p>
-            {joinedSession?.archivedAt && captureState === "archived" ? (
-              <div className="mt-3 flex gap-2 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
-                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
-                <p>
-                  Captures added here will join an archived session. Continue only
-                  if you meant to reopen this review workflow.
+          <CardContent>
+            <div className="mb-4 rounded-lg border bg-muted/40 p-3">
+              <p className="text-sm font-bold" data-state={captureState}>
+                {captureStateLabel(captureState)}
+              </p>
+              <p className="mt-1 text-sm text-muted-foreground">{message}</p>
+              {joinedSession?.archivedAt && captureState === "archived" ? (
+                <Alert className="mt-3 border-amber-200 bg-amber-50 text-amber-800">
+                  <AlertTriangle className="h-4 w-4" aria-hidden="true" />
+                  <AlertDescription>
+                    Captures added here will join an archived session. Continue only
+                    if you meant to reopen this review workflow.
+                  </AlertDescription>
+                </Alert>
+              ) : null}
+              {savedPath ? (
+                <p className="mt-2 break-all text-xs text-muted-foreground">
+                  {savedPath}
                 </p>
-              </div>
-            ) : null}
-            {savedPath ? (
-              <p className="mt-2 break-all text-xs text-[#667085]">{savedPath}</p>
-            ) : null}
-          </div>
+              ) : null}
+            </div>
 
           <div className="grid gap-2">
             {captureState === "archived" ? (
-              <button
-                className="min-h-11 rounded-md bg-amber-700 px-4 font-bold text-white hover:bg-amber-800"
+              <Button
+                className="h-11"
                 type="button"
+                variant="secondary"
                 onClick={() => void startCamera()}
               >
                 Start capture anyway
-              </button>
+              </Button>
             ) : null}
             {captureState === "claimed" ? (
-              <button
-                className="min-h-11 rounded-md bg-teal-700 px-4 font-bold text-white hover:bg-teal-800"
+              <Button
+                className="h-11"
                 type="button"
                 onClick={() => void replaceActiveClient()}
               >
                 Replace active client
-              </button>
+              </Button>
             ) : null}
-            <button
-              className="min-h-11 rounded-md bg-teal-700 px-4 font-bold text-white hover:bg-teal-800 disabled:cursor-not-allowed disabled:bg-gray-300 disabled:text-gray-600"
+            <Button
+              className="h-11"
               type="button"
               onClick={captureFrame}
               disabled={captureState !== "ready" && captureState !== "captured" && captureState !== "saved"}
             >
               Capture still
-            </button>
-            <button
-              className="min-h-11 rounded-md border border-[#b8c0cc] bg-white px-4 font-bold text-[#151923] hover:bg-gray-50 disabled:cursor-not-allowed disabled:bg-gray-100 disabled:text-gray-500"
+            </Button>
+            <Button
+              className="h-11"
               type="button"
+              variant="outline"
               onClick={() => void uploadFrame()}
               disabled={captureState !== "captured"}
             >
               Upload Best Frame
-            </button>
+            </Button>
           </div>
-        </aside>
+          </CardContent>
+        </Card>
       </div>
     </section>
   );
