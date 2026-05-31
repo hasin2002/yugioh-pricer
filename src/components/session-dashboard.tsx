@@ -123,6 +123,13 @@ export function SessionDashboard() {
   const [sessionItems, setSessionItems] = useState<Record<number, SessionItem[]>>(
     {},
   );
+  const [selectedReviewItemIds, setSelectedReviewItemIds] = useState<
+    Record<number, number[]>
+  >({});
+  const [itemSavingId, setItemSavingId] = useState<number | null>(null);
+  const [bulkConfirmingSessionId, setBulkConfirmingSessionId] = useState<
+    number | null
+  >(null);
   const manualSearchRequestRef = useRef(0);
 
   const trpc = useMemo(
@@ -151,6 +158,43 @@ export function SessionDashboard() {
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  useEffect(() => {
+    const unloadedSessions = sessions.filter(
+      (session) => sessionItems[session.id] === undefined,
+    );
+
+    if (unloadedSessions.length === 0) {
+      return;
+    }
+
+    let cancelled = false;
+
+    void Promise.all(
+      unloadedSessions.map(async (session) => ({
+        id: session.id,
+        items: await trpc.sessions.items.query({ id: session.id }),
+      })),
+    ).then((loadedSessions) => {
+      if (cancelled) {
+        return;
+      }
+
+      setSessionItems((current) => {
+        const next = { ...current };
+
+        for (const loadedSession of loadedSessions) {
+          next[loadedSession.id] = loadedSession.items;
+        }
+
+        return next;
+      });
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [sessions, sessionItems, trpc]);
 
   const refreshMetadataStatus = useCallback(async () => {
     setMetadataStatus(await trpc.cards.metadataStatus.query());
@@ -222,6 +266,12 @@ export function SessionDashboard() {
   async function loadSessionItems(sessionId: number) {
     const items = await trpc.sessions.items.query({ id: sessionId });
     setSessionItems((current) => ({ ...current, [sessionId]: items }));
+    setSelectedReviewItemIds((current) => ({
+      ...current,
+      [sessionId]: (current[sessionId] ?? []).filter((id) =>
+        items.some((item) => item.id === id && item.reviewReason === "Rarity Review"),
+      ),
+    }));
   }
 
   async function refreshItemPricing(sessionId: number, itemId: number) {
@@ -231,6 +281,102 @@ export function SessionDashboard() {
       await Promise.all([loadSessionItems(sessionId), refresh()]);
     } finally {
       setPricingRefreshingId(null);
+    }
+  }
+
+  async function confirmItemRarity(sessionId: number, itemId: number) {
+    setItemSavingId(itemId);
+    try {
+      await trpc.sessions.confirmItemRarity.mutate({ id: itemId });
+      await Promise.all([loadSessionItems(sessionId), refresh()]);
+    } finally {
+      setItemSavingId(null);
+    }
+  }
+
+  async function updateSessionItem(
+    event: FormEvent<HTMLFormElement>,
+    sessionId: number,
+    item: SessionItem,
+  ) {
+    event.preventDefault();
+    const formData = new FormData(event.currentTarget);
+    const value = (name: string) => String(formData.get(name) ?? "").trim();
+
+    setItemSavingId(item.id);
+    try {
+      await trpc.sessions.updateItem.mutate({
+        id: item.id,
+        cardName: value("cardName"),
+        setCode: value("setCode"),
+        passcode: value("passcode"),
+        rarity: value("rarity"),
+        edition: value("edition") as ManualEntryForm["edition"],
+        language: value("language"),
+        condition: value("condition") as ManualEntryForm["condition"],
+        quantity: Number(value("quantity")),
+        rarityConfirmed: formData.get("rarityConfirmed") === "on",
+        printingIdentityTrusted: formData.get("printingIdentityTrusted") === "on",
+      });
+      await Promise.all([loadSessionItems(sessionId), refresh()]);
+    } finally {
+      setItemSavingId(null);
+    }
+  }
+
+  function toggleReviewSelection(sessionId: number, itemId: number) {
+    setSelectedReviewItemIds((current) => {
+      const selected = current[sessionId] ?? [];
+      const next = selected.includes(itemId)
+        ? selected.filter((id) => id !== itemId)
+        : [...selected, itemId];
+
+      return { ...current, [sessionId]: next };
+    });
+  }
+
+  function selectedSimilarRarityItems(sessionId: number) {
+    const selected = selectedReviewItemIds[sessionId] ?? [];
+    const items = sessionItems[sessionId] ?? [];
+    const selectedItems = selected
+      .map((id) => items.find((item) => item.id === id))
+      .filter((item): item is SessionItem => Boolean(item));
+    const [firstItem] = selectedItems;
+
+    if (!firstItem) {
+      return { items: selectedItems, allowed: false };
+    }
+
+    const allowed = selectedItems.every(
+      (item) =>
+        item.reviewReason === "Rarity Review" &&
+        item.cardName === firstItem.cardName &&
+        item.setCode === firstItem.setCode &&
+        item.passcode === firstItem.passcode &&
+        item.rarity === firstItem.rarity &&
+        item.edition === firstItem.edition &&
+        item.language === firstItem.language,
+    );
+
+    return { items: selectedItems, allowed };
+  }
+
+  async function bulkConfirmSelectedRarities(sessionId: number) {
+    const selection = selectedSimilarRarityItems(sessionId);
+
+    if (!selection.allowed || selection.items.length === 0) {
+      return;
+    }
+
+    setBulkConfirmingSessionId(sessionId);
+    try {
+      await trpc.sessions.bulkConfirmRarity.mutate({
+        ids: selection.items.map((item) => item.id),
+      });
+      setSelectedReviewItemIds((current) => ({ ...current, [sessionId]: [] }));
+      await Promise.all([loadSessionItems(sessionId), refresh()]);
+    } finally {
+      setBulkConfirmingSessionId(null);
     }
   }
 
@@ -1080,64 +1226,236 @@ export function SessionDashboard() {
                           </div>
                         </form>
                       </div>
-
-                      {(sessionItems[session.id] ?? []).length > 0 ? (
-                        <div className="border-t border-[#e2e8f0] bg-white px-4 py-3">
-                          <h5 className="mb-2 text-sm font-bold text-[#344054]">
-                            Manual cards
-                          </h5>
-                          <ul className="grid gap-2 p-0">
-                            {(sessionItems[session.id] ?? []).map((item) => (
-                              <li
-                                className="grid gap-2 rounded-md border border-[#e4e7ec] px-3 py-2 text-sm md:grid-cols-[minmax(0,1fr)_auto]"
-                                key={item.id}
-                              >
-                                <div className="min-w-0">
-                                  <span className="block truncate font-semibold">
-                                    {item.quantity}x {item.cardName}
-                                  </span>
-                                  <span className="text-[#667085]">
-                                    {item.setCode} · {item.rarity} · {item.edition} ·{" "}
-                                    {item.condition} · {item.language}
-                                  </span>
-                                </div>
-                                <div className="flex items-center gap-2 md:justify-end">
-                                  {formatSnapshotAmount(item) ? (
-                                    <span className="rounded-full bg-emerald-50 px-2 py-1 text-xs font-bold text-emerald-700">
-                                      {formatSnapshotAmount(item)}
-                                    </span>
-                                  ) : (
-                                    <span className="rounded-full bg-amber-50 px-2 py-1 text-xs font-bold text-amber-700">
-                                      {item.pricingIssue ?? "No price found"}
-                                    </span>
-                                  )}
-                                  <button
-                                    className="inline-flex h-8 w-8 items-center justify-center rounded-md text-[#475467] hover:bg-[#f2f4f7] disabled:cursor-not-allowed disabled:opacity-60"
-                                    type="button"
-                                    disabled={pricingRefreshingId === item.id}
-                                    onClick={() =>
-                                      void refreshItemPricing(session.id, item.id)
-                                    }
-                                    aria-label={`Refresh pricing for ${item.cardName}`}
-                                    title="Refresh pricing"
-                                  >
-                                    <RefreshCw
-                                      className={`h-4 w-4 ${
-                                        pricingRefreshingId === item.id
-                                          ? "animate-spin"
-                                          : ""
-                                      }`}
-                                      aria-hidden="true"
-                                    />
-                                  </button>
-                                </div>
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      ) : null}
                     </div>
                   ) : null}
+
+                  {sessionItems[session.id] !== undefined ? (
+                        <div className="mt-4 grid gap-5 rounded-md border border-[#e2e8f0] bg-white px-4 py-4">
+                          {(() => {
+                            const items = sessionItems[session.id] ?? [];
+                            const reviewItems = items.filter(
+                              (item) => item.reviewStatus === "requires_review",
+                            );
+                            const successItems = items.filter(
+                              (item) => item.reviewStatus === "success",
+                            );
+                            const bulkSelection = selectedSimilarRarityItems(session.id);
+
+                            const renderItemForm = (item: SessionItem) => (
+                              <li
+                                className="rounded-md border border-[#e4e7ec] bg-white p-3"
+                                key={item.id}
+                              >
+                                <div className="mb-3 flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                                  <div className="min-w-0">
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      {item.reviewReason === "Rarity Review" ? (
+                                        <label className="flex items-center gap-2 text-sm font-semibold text-[#344054]">
+                                          <input
+                                            className="h-4 w-4 accent-teal-700"
+                                            type="checkbox"
+                                            checked={(selectedReviewItemIds[session.id] ?? []).includes(
+                                              item.id,
+                                            )}
+                                            onChange={() =>
+                                              toggleReviewSelection(session.id, item.id)
+                                            }
+                                          />
+                                          Select
+                                        </label>
+                                      ) : null}
+                                      <span className="font-bold text-[#101828]">
+                                        {item.quantity}x {item.cardName}
+                                      </span>
+                                      {item.reviewReason ? (
+                                        <span className="rounded-full bg-amber-50 px-2 py-1 text-xs font-bold text-amber-700">
+                                          {item.reviewReason}
+                                        </span>
+                                      ) : (
+                                        <span className="rounded-full bg-emerald-50 px-2 py-1 text-xs font-bold text-emerald-700">
+                                          Successfully Scanned
+                                        </span>
+                                      )}
+                                    </div>
+                                    <p className="mt-1 text-sm text-[#667085]">
+                                      {item.setCode} · {item.rarity} · {item.edition} ·{" "}
+                                      {item.condition} · {item.language}
+                                    </p>
+                                  </div>
+                                  <div className="flex flex-wrap items-center gap-2 md:justify-end">
+                                    {formatSnapshotAmount(item) ? (
+                                      <span className="rounded-full bg-emerald-50 px-2 py-1 text-xs font-bold text-emerald-700">
+                                        {formatSnapshotAmount(item)}
+                                      </span>
+                                    ) : (
+                                      <span className="rounded-full bg-amber-50 px-2 py-1 text-xs font-bold text-amber-700">
+                                        {item.pricingIssue ?? "No price found"}
+                                      </span>
+                                    )}
+                                    {item.reviewReason === "Rarity Review" ? (
+                                      <button
+                                        className="inline-flex min-h-8 items-center justify-center gap-1.5 rounded-md bg-teal-700 px-2.5 text-xs font-bold text-white hover:bg-teal-800 disabled:cursor-not-allowed disabled:opacity-60"
+                                        type="button"
+                                        disabled={itemSavingId === item.id}
+                                        onClick={() =>
+                                          void confirmItemRarity(session.id, item.id)
+                                        }
+                                      >
+                                        <Check className="h-3.5 w-3.5" aria-hidden="true" />
+                                        Confirm rarity
+                                      </button>
+                                    ) : null}
+                                    <button
+                                      className="inline-flex h-8 w-8 items-center justify-center rounded-md text-[#475467] hover:bg-[#f2f4f7] disabled:cursor-not-allowed disabled:opacity-60"
+                                      type="button"
+                                      disabled={pricingRefreshingId === item.id}
+                                      onClick={() =>
+                                        void refreshItemPricing(session.id, item.id)
+                                      }
+                                      aria-label={`Refresh pricing for ${item.cardName}`}
+                                      title="Refresh pricing"
+                                    >
+                                      <RefreshCw
+                                        className={`h-4 w-4 ${
+                                          pricingRefreshingId === item.id
+                                            ? "animate-spin"
+                                            : ""
+                                        }`}
+                                        aria-hidden="true"
+                                      />
+                                    </button>
+                                  </div>
+                                </div>
+                                <form
+                                  className="grid gap-3 md:grid-cols-12"
+                                  onSubmit={(event) =>
+                                    void updateSessionItem(event, session.id, item)
+                                  }
+                                >
+                                  <label className="grid gap-1 text-xs font-bold text-[#344054] md:col-span-4">
+                                    Card name
+                                    <input className="min-h-9 rounded-md border border-[#b8c2d2] px-2 text-sm font-normal text-[#101828]" name="cardName" defaultValue={item.cardName} required />
+                                  </label>
+                                  <label className="grid gap-1 text-xs font-bold text-[#344054] md:col-span-2">
+                                    Quantity
+                                    <input className="min-h-9 rounded-md border border-[#b8c2d2] px-2 text-sm font-normal text-[#101828]" name="quantity" defaultValue={item.quantity} min={1} max={999} type="number" required />
+                                  </label>
+                                  <label className="grid gap-1 text-xs font-bold text-[#344054] md:col-span-2">
+                                    Set Code
+                                    <input className="min-h-9 rounded-md border border-[#b8c2d2] px-2 text-sm font-normal text-[#101828]" name="setCode" defaultValue={item.setCode} required />
+                                  </label>
+                                  <label className="grid gap-1 text-xs font-bold text-[#344054] md:col-span-2">
+                                    Passcode
+                                    <input className="min-h-9 rounded-md border border-[#b8c2d2] px-2 text-sm font-normal text-[#101828]" name="passcode" defaultValue={item.passcode} required />
+                                  </label>
+                                  <label className="grid gap-1 text-xs font-bold text-[#344054] md:col-span-2">
+                                    Rarity
+                                    <input className="min-h-9 rounded-md border border-[#b8c2d2] px-2 text-sm font-normal text-[#101828]" name="rarity" defaultValue={item.rarity} required />
+                                  </label>
+                                  <label className="grid gap-1 text-xs font-bold text-[#344054] md:col-span-2">
+                                    Edition
+                                    <select className="min-h-9 rounded-md border border-[#b8c2d2] px-2 text-sm font-normal text-[#101828]" name="edition" defaultValue={item.edition}>
+                                      {CARD_EDITIONS.map((edition) => (
+                                        <option key={edition}>{edition}</option>
+                                      ))}
+                                    </select>
+                                  </label>
+                                  <label className="grid gap-1 text-xs font-bold text-[#344054] md:col-span-2">
+                                    Language
+                                    <input className="min-h-9 rounded-md border border-[#b8c2d2] px-2 text-sm font-normal text-[#101828]" name="language" defaultValue={item.language} required />
+                                  </label>
+                                  <label className="grid gap-1 text-xs font-bold text-[#344054] md:col-span-2">
+                                    Condition
+                                    <select className="min-h-9 rounded-md border border-[#b8c2d2] px-2 text-sm font-normal text-[#101828]" name="condition" defaultValue={item.condition}>
+                                      {CARD_CONDITIONS.map((condition) => (
+                                        <option key={condition}>{condition}</option>
+                                      ))}
+                                    </select>
+                                  </label>
+                                  <div className="flex flex-wrap items-end gap-3 md:col-span-4">
+                                    <label className="flex min-h-9 items-center gap-2 text-xs font-bold text-[#344054]">
+                                      <input className="h-4 w-4 accent-teal-700" name="printingIdentityTrusted" type="checkbox" defaultChecked={item.printingIdentityTrusted} />
+                                      Trusted identity
+                                    </label>
+                                    <label className="flex min-h-9 items-center gap-2 text-xs font-bold text-[#344054]">
+                                      <input className="h-4 w-4 accent-teal-700" name="rarityConfirmed" type="checkbox" defaultChecked={Boolean(item.rarityConfirmedAt)} />
+                                      Rarity confirmed
+                                    </label>
+                                    <button
+                                      className="inline-flex min-h-9 items-center justify-center rounded-md bg-gray-900 px-3 text-sm font-semibold text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-60"
+                                      type="submit"
+                                      disabled={itemSavingId === item.id}
+                                    >
+                                      Save correction
+                                    </button>
+                                  </div>
+                                </form>
+                              </li>
+                            );
+
+                            return (
+                              <>
+                                <section aria-labelledby={`review-items-${session.id}`}>
+                                  <div className="mb-3 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                                    <div>
+                                      <h5
+                                        className="text-sm font-bold text-[#344054]"
+                                        id={`review-items-${session.id}`}
+                                      >
+                                        Requires Review
+                                      </h5>
+                                      <p className="text-sm text-[#667085]">
+                                        Confirm rarity or correct trusted identity fields.
+                                      </p>
+                                    </div>
+                                    <button
+                                      className="inline-flex min-h-9 w-fit items-center justify-center gap-2 rounded-md bg-teal-700 px-3 text-sm font-semibold text-white hover:bg-teal-800 disabled:cursor-not-allowed disabled:opacity-60"
+                                      type="button"
+                                      disabled={
+                                        !bulkSelection.allowed ||
+                                        bulkSelection.items.length === 0 ||
+                                        bulkConfirmingSessionId === session.id
+                                      }
+                                      onClick={() =>
+                                        void bulkConfirmSelectedRarities(session.id)
+                                      }
+                                    >
+                                      <Check className="h-4 w-4" aria-hidden="true" />
+                                      Confirm selected similar rarities
+                                    </button>
+                                  </div>
+                                  {reviewItems.length > 0 ? (
+                                    <ul className="grid gap-3 p-0">
+                                      {reviewItems.map(renderItemForm)}
+                                    </ul>
+                                  ) : (
+                                    <p className="rounded-md border border-[#e4e7ec] px-3 py-4 text-sm text-[#667085]">
+                                      No items require review.
+                                    </p>
+                                  )}
+                                </section>
+                                <section aria-labelledby={`success-items-${session.id}`}>
+                                  <h5
+                                    className="mb-3 text-sm font-bold text-[#344054]"
+                                    id={`success-items-${session.id}`}
+                                  >
+                                    Successfully Scanned
+                                  </h5>
+                                  {successItems.length > 0 ? (
+                                    <ul className="grid gap-3 p-0">
+                                      {successItems.map(renderItemForm)}
+                                    </ul>
+                                  ) : (
+                                    <p className="rounded-md border border-[#e4e7ec] px-3 py-4 text-sm text-[#667085]">
+                                      Confirm required review fields to move items here.
+                                    </p>
+                                  )}
+                                </section>
+                              </>
+                            );
+                          })()}
+                        </div>
+                      ) : null}
                 </li>
               ))}
             </ul>

@@ -45,6 +45,10 @@ describe("database schema", () => {
     expect(sessionItems.sessionId.name).toBe("session_id");
     expect(sessionItems.bestFrameId.name).toBe("best_frame_id");
     expect(sessionItems.entrySource.name).toBe("entry_source");
+    expect(sessionItems.rarityConfirmedAt.name).toBe("rarity_confirmed_at");
+    expect(sessionItems.printingIdentityTrusted.name).toBe(
+      "printing_identity_trusted",
+    );
   });
 
   it("defines price snapshots for session items", () => {

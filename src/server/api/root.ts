@@ -64,6 +64,23 @@ const sessionItemIdInputSchema = z.object({
   id: z.number().int().positive(),
 });
 
+const updateSessionItemInputSchema = sessionItemIdInputSchema.extend({
+  cardName: z.string().trim().min(1).max(160),
+  setCode: z.string().trim().min(1).max(40),
+  passcode: z.string().trim().min(1).max(40),
+  rarity: z.string().trim().min(1).max(80),
+  edition: cardEditionSchema,
+  language: z.string().trim().min(1).max(40),
+  condition: cardConditionSchema,
+  quantity: z.number().int().min(1).max(999),
+  rarityConfirmed: z.boolean().default(false),
+  printingIdentityTrusted: z.boolean().default(true),
+});
+
+const bulkConfirmRarityInputSchema = z.object({
+  ids: z.array(z.number().int().positive()).min(1).max(100),
+});
+
 type PriceSnapshot = typeof priceSnapshots.$inferSelect;
 
 type SessionPricingSummary = {
@@ -190,6 +207,14 @@ function calculatePricingSummary(
   for (const item of items) {
     const snapshot = latestSnapshots.get(item.id);
 
+    if (reviewReasonFor(item)) {
+      unpricedItemCount += item.quantity;
+      if (snapshot?.status === "pricing_unavailable") {
+        pricingIssueCount += item.quantity;
+      }
+      continue;
+    }
+
     if (
       snapshot?.status === "priced" &&
       snapshot.observedAmount &&
@@ -218,6 +243,52 @@ function calculatePricingSummary(
     unpricedItemCount,
     pricingIssueCount,
   };
+}
+
+function hasTrustedPrintingIdentity(item: typeof sessionItems.$inferSelect) {
+  return (
+    item.printingIdentityTrusted &&
+    item.cardName.trim().length > 0 &&
+    item.setCode.trim().length > 0 &&
+    item.passcode.trim().length > 0 &&
+    item.rarity.trim().length > 0 &&
+    item.edition.trim().length > 0 &&
+    item.language.trim().length > 0
+  );
+}
+
+function reviewReasonFor(item: typeof sessionItems.$inferSelect) {
+  if (!hasTrustedPrintingIdentity(item)) {
+    return "Identification Review" as const;
+  }
+
+  if (!item.rarityConfirmedAt) {
+    return "Rarity Review" as const;
+  }
+
+  return null;
+}
+
+function reviewQuantityFor(items: (typeof sessionItems.$inferSelect)[]) {
+  return items.reduce(
+    (total, item) => total + (reviewReasonFor(item) ? item.quantity : 0),
+    0,
+  );
+}
+
+async function updateSessionReviewCount(db: Db, sessionId: number, now = new Date()) {
+  const items = await db
+    .select()
+    .from(sessionItems)
+    .where(eq(sessionItems.sessionId, sessionId));
+  const reviewCount = reviewQuantityFor(items);
+
+  await db
+    .update(pricingSessions)
+    .set({ reviewCount, updatedAt: now })
+    .where(eq(pricingSessions.id, sessionId));
+
+  return reviewCount;
 }
 
 async function pricingSummariesForSessions(
@@ -321,10 +392,15 @@ function serializeSessionItem(
   item: typeof sessionItems.$inferSelect,
   latestSnapshot: PriceSnapshot | null = null,
 ) {
+  const reviewReason = reviewReasonFor(item);
+
   return {
     ...item,
+    reviewReason,
+    reviewStatus: reviewReason ? ("requires_review" as const) : ("success" as const),
     latestPriceSnapshot: serializePriceSnapshot(latestSnapshot),
     pricingIssue: pricingIssueLabel(latestSnapshot),
+    rarityConfirmedAt: item.rarityConfirmedAt?.toISOString() ?? null,
     createdAt: item.createdAt.toISOString(),
     updatedAt: item.updatedAt.toISOString(),
   };
@@ -535,6 +611,8 @@ export const appRouter = router({
             setCode: input.setCode,
             passcode: input.passcode,
             rarity: input.rarity,
+            rarityConfirmedAt: null,
+            printingIdentityTrusted: true,
             edition: input.edition,
             language: input.language,
             condition: input.condition,
@@ -544,13 +622,7 @@ export const appRouter = router({
           })
           .returning();
 
-        await ctx.db
-          .update(pricingSessions)
-          .set({
-            reviewCount: session.reviewCount + input.quantity,
-            updatedAt: now,
-          })
-          .where(eq(pricingSessions.id, input.id));
+        await updateSessionReviewCount(ctx.db, input.id, now);
 
         const snapshot = await fetchAndStorePriceSnapshot(ctx.db, {
           id: item.id,
@@ -559,6 +631,111 @@ export const appRouter = router({
         });
 
         return serializeSessionItem(item, snapshot);
+      }),
+    updateItem: publicProcedure
+      .input(updateSessionItemInputSchema)
+      .mutation(async ({ ctx, input }) => {
+        const [existingItem] = await ctx.db
+          .select()
+          .from(sessionItems)
+          .where(eq(sessionItems.id, input.id));
+
+        if (!existingItem) {
+          return null;
+        }
+
+        const now = new Date();
+        const [item] = await ctx.db
+          .update(sessionItems)
+          .set({
+            cardName: input.cardName,
+            setCode: input.setCode,
+            passcode: input.passcode,
+            rarity: input.rarity,
+            rarityConfirmedAt: input.rarityConfirmed ? now : null,
+            printingIdentityTrusted: input.printingIdentityTrusted,
+            edition: input.edition,
+            language: input.language,
+            condition: input.condition,
+            quantity: input.quantity,
+            updatedAt: now,
+          })
+          .where(eq(sessionItems.id, input.id))
+          .returning();
+
+        await updateSessionReviewCount(ctx.db, item.sessionId, now);
+
+        const snapshot = await fetchAndStorePriceSnapshot(ctx.db, {
+          id: item.id,
+          passcode: item.passcode,
+          setCode: item.setCode,
+        });
+
+        return serializeSessionItem(item, snapshot);
+      }),
+    confirmItemRarity: publicProcedure
+      .input(sessionItemIdInputSchema)
+      .mutation(async ({ ctx, input }) => {
+        const [existingItem] = await ctx.db
+          .select()
+          .from(sessionItems)
+          .where(eq(sessionItems.id, input.id));
+
+        if (!existingItem || !hasTrustedPrintingIdentity(existingItem)) {
+          return null;
+        }
+
+        const now = new Date();
+        const [item] = await ctx.db
+          .update(sessionItems)
+          .set({ rarityConfirmedAt: now, updatedAt: now })
+          .where(eq(sessionItems.id, input.id))
+          .returning();
+
+        await updateSessionReviewCount(ctx.db, item.sessionId, now);
+
+        return serializeSessionItem(item);
+      }),
+    bulkConfirmRarity: publicProcedure
+      .input(bulkConfirmRarityInputSchema)
+      .mutation(async ({ ctx, input }) => {
+        const uniqueIds = Array.from(new Set(input.ids));
+        const items = await ctx.db
+          .select()
+          .from(sessionItems)
+          .where(inArray(sessionItems.id, uniqueIds));
+
+        if (items.length !== uniqueIds.length || items.length === 0) {
+          return { updatedCount: 0, rejected: true };
+        }
+
+        const firstItem = items[0]!;
+        const allSimilar = items.every(
+          (item) =>
+            item.sessionId === firstItem.sessionId &&
+            reviewReasonFor(item) === "Rarity Review" &&
+            item.cardName === firstItem.cardName &&
+            item.setCode === firstItem.setCode &&
+            item.passcode === firstItem.passcode &&
+            item.rarity === firstItem.rarity &&
+            item.edition === firstItem.edition &&
+            item.language === firstItem.language,
+        );
+
+        if (!allSimilar) {
+          return { updatedCount: 0, rejected: true };
+        }
+
+        const now = new Date();
+        const updatedItems = await ctx.db
+          .update(sessionItems)
+          .set({ rarityConfirmedAt: now, updatedAt: now })
+          .where(inArray(sessionItems.id, uniqueIds))
+          .returning();
+
+        await updateSessionReviewCount(ctx.db, firstItem.sessionId, now);
+
+        return { updatedCount: updatedItems.length, rejected: false };
       }),
     refreshItemPricing: publicProcedure
       .input(sessionItemIdInputSchema)
