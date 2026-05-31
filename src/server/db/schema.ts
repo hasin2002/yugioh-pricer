@@ -80,6 +80,12 @@ export const sessionItems = sqliteTable("session_items", {
   setCode: text("set_code").notNull(),
   passcode: text("passcode").notNull(),
   rarity: text("rarity").notNull(),
+  rarityConfirmedAt: integer("rarity_confirmed_at", { mode: "timestamp" }),
+  printingIdentityTrusted: integer("printing_identity_trusted", {
+    mode: "boolean",
+  })
+    .default(false)
+    .notNull(),
   edition: text("edition").notNull(),
   language: text("language").notNull(),
   condition: text("condition").notNull(),

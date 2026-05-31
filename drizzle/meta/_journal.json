@@ -50,6 +50,13 @@
       "when": 1780252339067,
       "tag": "0006_lying_blue_blade",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1780252829566,
+      "tag": "0007_normal_gorgon",
+      "breakpoints": true
     }
   ]
 }

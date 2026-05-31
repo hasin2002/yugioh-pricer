@@ -68,6 +68,8 @@ function createTestCaller() {
       set_code text NOT NULL,
       passcode text NOT NULL,
       rarity text NOT NULL,
+      rarity_confirmed_at integer,
+      printing_identity_trusted integer DEFAULT 0 NOT NULL,
       edition text NOT NULL,
       language text NOT NULL,
       condition text NOT NULL,
@@ -253,6 +255,8 @@ describe("appRouter", () => {
         language: "English",
         condition: "Near Mint",
         quantity: 2,
+        reviewReason: "Rarity Review",
+        reviewStatus: "requires_review",
       });
       expect(item.latestPriceSnapshot).toMatchObject({
         status: "priced",
@@ -263,10 +267,155 @@ describe("appRouter", () => {
       expect(items).toHaveLength(1);
       expect(items[0]?.latestPriceSnapshot?.observedAmount).toBe("12.34");
       expect(sessions[0]?.reviewCount).toBe(2);
-      expect(sessions[0]?.sessionEstimatedValue).toBe("$24.68");
-      expect(summary.collectionEstimatedValue).toBe("$24.68");
+      expect(sessions[0]?.sessionEstimatedValue).toBe("$0.00");
+      expect(summary.collectionEstimatedValue).toBe("£0.00");
     } finally {
       restoreFetch();
+      close();
+    }
+  });
+
+  it("promotes rarity-confirmed items to successfully scanned", async () => {
+    const restoreFetch = mockYgoPriceResponse({
+      data: [
+        {
+          id: 46986414,
+          card_sets: [
+            {
+              set_code: "LOB-005",
+              set_price: "12.34",
+            },
+          ],
+        },
+      ],
+    });
+    const { caller, close } = createTestCaller();
+
+    try {
+      const session = await caller.sessions.create();
+      const item = await caller.sessions.addManualItem({
+        id: session.id,
+        cardName: "Dark Magician",
+        setCode: "LOB-005",
+        passcode: "46986414",
+        rarity: "Ultra Rare",
+      });
+
+      const confirmed = await caller.sessions.confirmItemRarity({ id: item.id });
+      const items = await caller.sessions.items({ id: session.id });
+      const [listedSession] = await caller.sessions.list();
+
+      expect(confirmed?.reviewReason).toBeNull();
+      expect(confirmed?.reviewStatus).toBe("success");
+      expect(confirmed?.rarityConfirmedAt).not.toBeNull();
+      expect(items[0]?.reviewStatus).toBe("success");
+      expect(listedSession?.reviewCount).toBe(0);
+      expect(listedSession?.sessionEstimatedValue).toBe("$12.34");
+    } finally {
+      restoreFetch();
+      close();
+    }
+  });
+
+  it("keeps untrusted printing identities in identification review until corrected", async () => {
+    const restoreFetch = mockYgoPriceResponse({
+      data: [{ id: 46986414, card_sets: [{ set_code: "LOB-005" }] }],
+    });
+    const { caller, db, close } = createTestCaller();
+
+    try {
+      const session = await caller.sessions.create();
+      const [item] = await db
+        .insert(schema.sessionItems)
+        .values({
+          sessionId: session.id,
+          entrySource: "capture",
+          cardName: "Dark Magician",
+          setCode: "LOB-005",
+          passcode: "46986414",
+          rarity: "Ultra Rare",
+          printingIdentityTrusted: false,
+          edition: "1st Edition",
+          language: "English",
+          condition: "Mint",
+          quantity: 1,
+        })
+        .returning();
+      await caller.sessions.updateItem({
+        id: item.id,
+        cardName: "Dark Magician",
+        setCode: "LOB-005",
+        passcode: "46986414",
+        rarity: "Ultra Rare",
+        edition: "1st Edition",
+        language: "English",
+        condition: "Mint",
+        quantity: 1,
+        printingIdentityTrusted: true,
+        rarityConfirmed: false,
+      });
+
+      const [reviewItem] = await caller.sessions.items({ id: session.id });
+
+      expect(reviewItem?.reviewReason).toBe("Rarity Review");
+    } finally {
+      restoreFetch();
+      close();
+    }
+  });
+
+  it("bulk confirms only selected similar rarity-review items", async () => {
+    const { caller, db, close } = createTestCaller();
+
+    try {
+      const session = await caller.sessions.create();
+      const insertedItems = await db
+        .insert(schema.sessionItems)
+        .values([
+          {
+            sessionId: session.id,
+            entrySource: "manual",
+            cardName: "Dark Magician",
+            setCode: "LOB-005",
+            passcode: "46986414",
+            rarity: "Ultra Rare",
+            printingIdentityTrusted: true,
+            edition: "1st Edition",
+            language: "English",
+            condition: "Mint",
+            quantity: 1,
+          },
+          {
+            sessionId: session.id,
+            entrySource: "manual",
+            cardName: "Dark Magician",
+            setCode: "LOB-005",
+            passcode: "46986414",
+            rarity: "Ultra Rare",
+            printingIdentityTrusted: true,
+            edition: "1st Edition",
+            language: "English",
+            condition: "Near Mint",
+            quantity: 2,
+          },
+        ])
+        .returning();
+
+      const result = await caller.sessions.bulkConfirmRarity({
+        ids: insertedItems.map((item) => item.id),
+      });
+      const items = await caller.sessions.items({ id: session.id });
+      const [listedSession] = await caller.sessions.list();
+
+      expect(result).toEqual({ updatedCount: 2, rejected: false });
+      expect(items).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ reviewStatus: "success" }),
+          expect.objectContaining({ reviewStatus: "success" }),
+        ]),
+      );
+      expect(listedSession?.reviewCount).toBe(0);
+    } finally {
       close();
     }
   });
@@ -388,6 +537,8 @@ describe("appRouter", () => {
           setCode: "LOB-005",
           passcode: "46986414",
           rarity: "Ultra Rare",
+          rarityConfirmedAt: new Date(),
+          printingIdentityTrusted: true,
           edition: "1st Edition",
           language: "English",
           condition: "Mint",
