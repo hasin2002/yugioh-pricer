@@ -38,13 +38,14 @@ describe("shadcn design foundation", () => {
     );
   });
 
-  it("keeps implementation cache details out of the primary dashboard language", () => {
+  it("keeps standalone lookup and cache maintenance off the homepage", () => {
     const dashboard = readFileSync(
       "src/components/session-dashboard.tsx",
       "utf8",
     );
 
-    expect(dashboard).toContain("Card lookup");
+    expect(dashboard).not.toContain("Card lookup");
     expect(dashboard).not.toContain("Card metadata cache");
+    expect(dashboard).toContain("Search card metadata for manual entry");
   });
 });

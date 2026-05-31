@@ -50,7 +50,6 @@ import {
 type RouterOutputs = inferRouterOutputs<AppRouter>;
 type Session = RouterOutputs["sessions"]["list"][number];
 type Summary = RouterOutputs["sessions"]["summary"];
-type CardMetadataStatus = RouterOutputs["cards"]["metadataStatus"];
 type CardMetadataResult = RouterOutputs["cards"]["searchMetadata"][number];
 type SessionItem = RouterOutputs["sessions"]["items"][number];
 
@@ -118,14 +117,6 @@ export function SessionDashboard() {
   const [savingId, setSavingId] = useState<number | null>(null);
   const [deletePendingId, setDeletePendingId] = useState<number | null>(null);
   const [editingId, setEditingId] = useState<number | null>(null);
-  const [metadataStatus, setMetadataStatus] =
-    useState<CardMetadataStatus | null>(null);
-  const [metadataRefreshing, setMetadataRefreshing] = useState(false);
-  const [metadataQuery, setMetadataQuery] = useState("");
-  const [metadataResults, setMetadataResults] = useState<CardMetadataResult[]>(
-    [],
-  );
-  const [metadataSearching, setMetadataSearching] = useState(false);
   const [manualSessionId, setManualSessionId] = useState<number | null>(null);
   const [manualQuery, setManualQuery] = useState("");
   const [manualResults, setManualResults] = useState<CardMetadataResult[]>([]);
@@ -215,14 +206,6 @@ export function SessionDashboard() {
     };
   }, [sessions, sessionItems, trpc]);
 
-  const refreshMetadataStatus = useCallback(async () => {
-    setMetadataStatus(await trpc.cards.metadataStatus.query());
-  }, [trpc]);
-
-  useEffect(() => {
-    void refreshMetadataStatus();
-  }, [refreshMetadataStatus]);
-
   useEffect(() => {
     const query = manualQuery.trim();
     const requestId = manualSearchRequestRef.current + 1;
@@ -252,35 +235,6 @@ export function SessionDashboard() {
 
     return () => window.clearTimeout(timeoutId);
   }, [manualQuery, manualSessionId, trpc]);
-
-  async function refreshMetadata() {
-    setMetadataRefreshing(true);
-    try {
-      const status = await trpc.cards.refreshMetadata.mutate();
-      setMetadataStatus(status);
-    } finally {
-      setMetadataRefreshing(false);
-    }
-  }
-
-  async function searchMetadata(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const query = metadataQuery.trim();
-
-    if (!query) {
-      setMetadataResults([]);
-      return;
-    }
-
-    setMetadataSearching(true);
-    try {
-      const results = await trpc.cards.searchMetadata.query({ query });
-      setMetadataResults(results);
-      await refreshMetadataStatus();
-    } finally {
-      setMetadataSearching(false);
-    }
-  }
 
   async function loadSessionItems(sessionId: number) {
     const items = await trpc.sessions.items.query({ id: sessionId });
@@ -614,106 +568,6 @@ export function SessionDashboard() {
             </p>
           </Card>
         </section>
-
-        <Card
-          className="mb-6 rounded-lg"
-          aria-labelledby="metadata-cache-title"
-        >
-          <CardContent className="grid gap-3 pt-4">
-            <div className="flex flex-col gap-1 md:flex-row md:items-end md:justify-between">
-              <div>
-                <CardTitle
-                  className="flex items-center gap-2 text-[17px]"
-                  id="metadata-cache-title"
-                >
-                  <Search className="h-5 w-5 text-primary" aria-hidden="true" />
-                  Card lookup
-                </CardTitle>
-                <CardDescription>
-                  Search card identities by name, Set Code, or Serial Number.
-                </CardDescription>
-              </div>
-              {metadataStatus?.refreshRecommended ? (
-                <p className="text-sm font-semibold text-amber-700">
-                  Card data refresh recommended
-                </p>
-              ) : null}
-            </div>
-            <form
-              className="flex flex-col gap-2 md:flex-row"
-              onSubmit={(event) => void searchMetadata(event)}
-            >
-              <Label className="sr-only" htmlFor="metadata-search">
-                Search card metadata
-              </Label>
-              <Input
-                className="h-10 min-w-0 flex-1"
-                id="metadata-search"
-                value={metadataQuery}
-                onChange={(event) => setMetadataQuery(event.target.value)}
-                placeholder="Search by name, Set Code, or Serial Number"
-              />
-              <Button className="h-10" type="submit" disabled={metadataSearching}>
-                <Search className="h-4 w-4" aria-hidden="true" />
-                Search
-              </Button>
-            </form>
-            <div className="flex flex-col gap-2 text-xs text-muted-foreground md:flex-row md:items-center md:justify-between">
-              <span>
-                {metadataStatus?.lastRefreshedAt
-                  ? `Card data updated ${formatDate(metadataStatus.lastRefreshedAt)}`
-                  : "Card data will refresh before lookup results are used."}
-              </span>
-              <Button
-                className="h-8 w-fit"
-                type="button"
-                size="sm"
-                variant="ghost"
-                disabled={metadataRefreshing}
-                onClick={() => void refreshMetadata()}
-              >
-                <RefreshCw
-                  className={`h-4 w-4 ${metadataRefreshing ? "animate-spin" : ""}`}
-                  aria-hidden="true"
-                />
-                Refresh card data
-              </Button>
-            </div>
-
-          {metadataSearching ? (
-            <div className="mt-4 border-t pt-4 text-sm text-muted-foreground">
-              Searching metadata...
-            </div>
-          ) : metadataResults.length > 0 ? (
-            <ul className="mt-4 divide-y border-t p-0">
-              {metadataResults.map((result) => (
-                <li
-                  className="grid gap-3 py-3 md:grid-cols-[minmax(0,1fr)_auto]"
-                  key={`${result.passcode}-${result.setCode ?? "card"}`}
-                >
-                  <div className="min-w-0">
-                    <p className="truncate font-bold">{result.name}</p>
-                    <p className="text-sm text-muted-foreground">
-                      Serial Number {result.passcode}
-                      {result.setCode
-                        ? ` · ${result.setCode} · ${result.rarity ?? "Unknown rarity"}`
-                        : ""}
-                    </p>
-                    {result.setName ? (
-                      <p className="mt-1 text-sm text-muted-foreground">
-                        {result.setName}
-                      </p>
-                    ) : null}
-                  </div>
-                  <Badge className="self-start" variant="secondary">
-                    Pricing required
-                  </Badge>
-                </li>
-              ))}
-            </ul>
-          ) : null}
-          </CardContent>
-        </Card>
 
         <Card
           className="mb-6 rounded-lg"
