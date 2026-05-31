@@ -27,6 +27,26 @@ import {
   searchRarities,
 } from "@/lib/printing-options";
 import { shouldSuggestMetadata } from "@/lib/search-suggestions";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardAction,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 type RouterOutputs = inferRouterOutputs<AppRouter>;
 type Session = RouterOutputs["sessions"]["list"][number];
@@ -487,7 +507,7 @@ export function SessionDashboard() {
     : [];
 
   return (
-    <main className="grid min-h-screen grid-cols-1 bg-[#f6f7f9] text-[#151923] md:grid-cols-[260px_minmax(0,1fr)]">
+    <main className="grid min-h-screen grid-cols-1 bg-muted/40 text-foreground md:grid-cols-[260px_minmax(0,1fr)]">
       <aside
         className="border-r border-[#d9dee7] bg-gray-900 p-5 text-gray-50 md:p-6"
         aria-label="Review navigation"
@@ -504,7 +524,7 @@ export function SessionDashboard() {
           <ul className="grid list-none gap-2 p-0">
             <li>
               <a
-                className="block rounded-md px-3 py-2.5 text-gray-300 hover:bg-gray-800 hover:text-white"
+                className="block rounded-lg px-3 py-2.5 text-gray-300 hover:bg-gray-800 hover:text-white"
                 href="/capture"
               >
                 Capture Client
@@ -512,24 +532,24 @@ export function SessionDashboard() {
             </li>
             <li>
               <a
-                className="block rounded-md bg-gray-800 px-3 py-2.5 text-white"
+                className="block rounded-lg bg-gray-800 px-3 py-2.5 text-white"
                 href="/"
               >
                 Home
               </a>
             </li>
             <li>
-              <span className="block rounded-md px-3 py-2.5 text-gray-300">
+              <span className="block rounded-lg px-3 py-2.5 text-gray-300">
                 Pricing Sessions
               </span>
             </li>
             <li>
-              <span className="block rounded-md px-3 py-2.5 text-gray-300">
+              <span className="block rounded-lg px-3 py-2.5 text-gray-300">
                 Review Queue
               </span>
             </li>
             <li>
-              <span className="block rounded-md px-3 py-2.5 text-gray-300">
+              <span className="block rounded-lg px-3 py-2.5 text-gray-300">
                 Collection
               </span>
             </li>
@@ -546,82 +566,84 @@ export function SessionDashboard() {
             >
               Pricing sessions
             </h1>
-            <p className="text-[#667085]">
+            <p className="text-muted-foreground">
               Durable review workspaces for scanned cards and pricing decisions.
             </p>
           </div>
-          <button
-            className="min-h-[42px] whitespace-nowrap rounded-md bg-teal-700 px-4 font-bold text-white hover:bg-teal-800 disabled:cursor-not-allowed disabled:bg-teal-900/60"
+          <Button
+            className="h-10 whitespace-nowrap"
             type="button"
+            size="lg"
             disabled={savingId !== null}
             onClick={createSession}
           >
             New session
-          </button>
+          </Button>
         </header>
 
         <section
           className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-3"
           aria-label="Collection summary"
         >
-          <article className="rounded-lg border border-[#d9dee7] bg-white p-[18px]">
-            <p className="mb-2.5 text-[13px] font-bold text-[#667085]">
+          <Card className="gap-2 rounded-lg p-[18px]">
+            <p className="text-[13px] font-bold text-muted-foreground">
               Collection estimated value
             </p>
             <p className="text-3xl font-extrabold leading-none">
               {summary?.collectionEstimatedValue ?? "£0.00"}
             </p>
-            <p className="mt-2 text-xs text-[#667085]">Active sessions only</p>
-          </article>
-          <article className="rounded-lg border border-[#d9dee7] bg-white p-[18px]">
-            <p className="mb-2.5 text-[13px] font-bold text-[#667085]">
+            <p className="text-xs text-muted-foreground">Active sessions only</p>
+          </Card>
+          <Card className="gap-2 rounded-lg p-[18px]">
+            <p className="text-[13px] font-bold text-muted-foreground">
               Review queue
             </p>
             <p className="text-3xl font-extrabold leading-none">
               {summary?.activeReviewCount ?? 0}
             </p>
-            <p className="mt-2 text-xs text-[#667085]">Across active sessions</p>
-          </article>
-          <article className="rounded-lg border border-[#d9dee7] bg-white p-[18px]">
-            <p className="mb-2.5 text-[13px] font-bold text-[#667085]">
+            <p className="text-xs text-muted-foreground">Across active sessions</p>
+          </Card>
+          <Card className="gap-2 rounded-lg p-[18px]">
+            <p className="text-[13px] font-bold text-muted-foreground">
               Recent sessions
             </p>
             <p className="text-3xl font-extrabold leading-none">
               {summary?.activeSessionCount ?? 0}
             </p>
-            <p className="mt-2 text-xs text-[#667085]">
+            <p className="text-xs text-muted-foreground">
               {summary?.archivedSessionCount ?? 0} archived
             </p>
-          </article>
+          </Card>
         </section>
 
-        <section
-          className="mb-6 rounded-lg border border-[#d9dee7] bg-white p-5"
+        <Card
+          className="mb-6 rounded-lg"
           aria-labelledby="metadata-cache-title"
         >
-          <div className="mb-4 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-            <div>
-              <h2
-                className="mb-1 flex items-center gap-2 text-[17px] font-bold"
+          <CardHeader>
+            <div className="min-w-0">
+              <CardTitle
+                className="flex items-center gap-2 text-[17px]"
                 id="metadata-cache-title"
               >
-                <Database className="h-5 w-5 text-teal-700" aria-hidden="true" />
+                <Database className="h-5 w-5 text-primary" aria-hidden="true" />
                 Card metadata cache
-              </h2>
-              <p className="text-sm text-[#667085]">
+              </CardTitle>
+              <CardDescription>
                 {metadataStatus?.lastRefreshedAt
                   ? `Updated ${formatDate(metadataStatus.lastRefreshedAt)} · ${metadataStatus.cardCount.toLocaleString()} cards · ${metadataStatus.printingCount.toLocaleString()} printings`
                   : "No local card metadata has been cached yet."}
-              </p>
+              </CardDescription>
               {metadataStatus?.refreshRecommended ? (
                 <p className="mt-1 text-sm font-semibold text-amber-700">
                   Refresh recommended
                 </p>
               ) : null}
             </div>
-            <button
-              className="inline-flex min-h-10 items-center justify-center gap-2 rounded-md bg-gray-900 px-3 text-sm font-semibold text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-60"
+            <CardAction>
+            <Button
               type="button"
+              size="lg"
               disabled={metadataRefreshing}
               onClick={() => void refreshMetadata()}
             >
@@ -630,39 +652,37 @@ export function SessionDashboard() {
                 aria-hidden="true"
               />
               Refresh
-            </button>
-          </div>
+            </Button>
+            </CardAction>
+          </CardHeader>
 
-          <form
-            className="flex flex-col gap-2 md:flex-row"
-            onSubmit={(event) => void searchMetadata(event)}
-          >
-            <label className="sr-only" htmlFor="metadata-search">
-              Search card metadata
-            </label>
-            <input
-              className="min-h-10 min-w-0 flex-1 rounded-md border border-[#b8c2d2] px-3 text-base outline-none focus:border-[#667085]"
-              id="metadata-search"
-              value={metadataQuery}
-              onChange={(event) => setMetadataQuery(event.target.value)}
-              placeholder="Search by name, Set Code, or Passcode"
-            />
-            <button
-              className="inline-flex min-h-10 items-center justify-center gap-2 rounded-md bg-teal-700 px-4 font-semibold text-white hover:bg-teal-800 disabled:cursor-not-allowed disabled:opacity-60"
-              type="submit"
-              disabled={metadataSearching}
+          <CardContent>
+            <form
+              className="flex flex-col gap-2 md:flex-row"
+              onSubmit={(event) => void searchMetadata(event)}
             >
-              <Search className="h-4 w-4" aria-hidden="true" />
-              Search
-            </button>
-          </form>
+              <Label className="sr-only" htmlFor="metadata-search">
+                Search card metadata
+              </Label>
+              <Input
+                className="h-10 min-w-0 flex-1"
+                id="metadata-search"
+                value={metadataQuery}
+                onChange={(event) => setMetadataQuery(event.target.value)}
+                placeholder="Search by name, Set Code, or Serial Number"
+              />
+              <Button className="h-10" type="submit" disabled={metadataSearching}>
+                <Search className="h-4 w-4" aria-hidden="true" />
+                Search
+              </Button>
+            </form>
 
           {metadataSearching ? (
-            <div className="mt-4 border-t border-[#eaecf0] pt-4 text-sm text-[#667085]">
+            <div className="mt-4 border-t pt-4 text-sm text-muted-foreground">
               Searching metadata...
             </div>
           ) : metadataResults.length > 0 ? (
-            <ul className="mt-4 divide-y divide-[#eaecf0] border-t border-[#eaecf0] p-0">
+            <ul className="mt-4 divide-y border-t p-0">
               {metadataResults.map((result) => (
                 <li
                   className="grid gap-3 py-3 md:grid-cols-[minmax(0,1fr)_auto]"
@@ -670,96 +690,98 @@ export function SessionDashboard() {
                 >
                   <div className="min-w-0">
                     <p className="truncate font-bold">{result.name}</p>
-                    <p className="text-sm text-[#667085]">
-                      Passcode {result.passcode}
+                    <p className="text-sm text-muted-foreground">
+                      Serial Number {result.passcode}
                       {result.setCode
                         ? ` · ${result.setCode} · ${result.rarity ?? "Unknown rarity"}`
                         : ""}
                     </p>
                     {result.setName ? (
-                      <p className="mt-1 text-sm text-[#667085]">
+                      <p className="mt-1 text-sm text-muted-foreground">
                         {result.setName}
                       </p>
                     ) : null}
                   </div>
-                  <span className="self-start rounded-full bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-700">
+                  <Badge className="self-start" variant="secondary">
                     Pricing required
-                  </span>
+                  </Badge>
                 </li>
               ))}
             </ul>
           ) : null}
-        </section>
+          </CardContent>
+        </Card>
 
-        <section
-          className="mb-6 rounded-lg border border-[#d9dee7] bg-white p-5"
+        <Card
+          className="mb-6 rounded-lg"
           aria-labelledby="continue-session-title"
         >
-          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <CardHeader>
             <div>
-              <h2
-                className="mb-1 text-[17px] font-bold"
+              <CardTitle
+                className="text-[17px]"
                 id="continue-session-title"
               >
                 Continue last session
-              </h2>
-              <p className="text-sm text-[#667085]">
+              </CardTitle>
+              <CardDescription>
                 {continueSession
                   ? `${continueSession.name} · updated ${formatDate(
                       continueSession.updatedAt,
                     )}`
                   : "No active pricing session yet."}
-              </p>
+              </CardDescription>
             </div>
+            <CardAction>
             {continueSession ? (
-              <a
-                className="inline-flex min-h-[42px] items-center justify-center rounded-md bg-gray-900 px-4 font-bold !text-white hover:bg-gray-800"
-                href={captureHref(continueSession)}
-              >
-                Continue
-              </a>
+              <Button asChild className="h-10" size="lg">
+                <a href={captureHref(continueSession)}>Continue</a>
+              </Button>
             ) : (
-              <button
-                className="min-h-[42px] rounded-md bg-gray-900 px-4 font-bold text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:bg-gray-700"
+              <Button
+                className="h-10"
                 type="button"
+                size="lg"
                 disabled={savingId !== null}
                 onClick={createSession}
               >
                 Start session
-              </button>
+              </Button>
             )}
-          </div>
-        </section>
+            </CardAction>
+          </CardHeader>
+        </Card>
 
-        <section
-          className="rounded-lg bg-white p-5 shadow-sm ring-1 ring-[#e4e7ec]"
+        <Card
+          className="rounded-lg"
           aria-labelledby="recent-sessions-title"
         >
-          <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <h2 className="text-[17px] font-bold" id="recent-sessions-title">
+          <CardHeader>
+            <CardTitle className="text-[17px]" id="recent-sessions-title">
               Recent pricing sessions
-            </h2>
-            <label className="flex items-center gap-2 text-sm font-semibold text-[#344054]">
-              <input
-                className="h-4 w-4 accent-teal-700"
-                type="checkbox"
+            </CardTitle>
+            <CardAction>
+            <Label className="flex items-center gap-2 text-sm font-semibold">
+              <Checkbox
                 checked={includeArchived}
-                onChange={(event) => setIncludeArchived(event.target.checked)}
+                onCheckedChange={(checked) => setIncludeArchived(checked === true)}
               />
               Show archived
-            </label>
-          </div>
+            </Label>
+            </CardAction>
+          </CardHeader>
+          <CardContent>
 
           {loading ? (
-            <div className="border-t border-[#eaecf0] py-8 text-[#667085]">
+            <div className="border-t py-8 text-muted-foreground">
               Loading sessions...
             </div>
           ) : sessions.length === 0 ? (
-            <div className="border-t border-[#eaecf0] py-8 text-[#667085]">
+            <div className="border-t py-8 text-muted-foreground">
               No pricing sessions yet.
             </div>
           ) : (
-            <ul className="divide-y divide-[#eaecf0] border-t border-[#eaecf0] p-0">
+            <ul className="divide-y border-t p-0">
               {sessions.map((session) => (
                 <li className="py-4" key={session.id}>
                   <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
@@ -771,29 +793,30 @@ export function SessionDashboard() {
                             void submitRename(event, session.id)
                           }
                         >
-                          <input
-                            className="min-h-10 min-w-0 flex-1 rounded-md border border-[#b8c2d2] px-2 text-base font-semibold outline-none focus:border-[#667085]"
+                          <Input
+                            className="h-10 min-w-0 flex-1 font-semibold"
                             defaultValue={session.name}
                             name="name"
                             aria-label={`Session name for ${session.name}`}
                             autoFocus
                           />
-                          <button
-                            className="inline-flex min-h-10 items-center gap-2 rounded-md bg-gray-900 px-3 text-sm font-semibold text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-60"
+                          <Button
+                            className="h-10"
                             type="submit"
                             disabled={savingId === session.id}
                           >
                             <Check className="h-4 w-4" aria-hidden="true" />
                             Save
-                          </button>
-                          <button
-                            className="inline-flex min-h-10 items-center gap-2 rounded-md px-3 text-sm font-semibold text-[#475467] hover:bg-[#f2f4f7]"
+                          </Button>
+                          <Button
                             type="button"
+                            variant="ghost"
+                            className="h-10"
                             onClick={() => setEditingId(null)}
                           >
                             <X className="h-4 w-4" aria-hidden="true" />
                             Cancel
-                          </button>
+                          </Button>
                         </form>
                       ) : (
                         <div className="mb-2 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
@@ -801,13 +824,13 @@ export function SessionDashboard() {
                             {session.name}
                           </h3>
                           {session.archivedAt ? (
-                            <span className="rounded-full bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-700">
+                            <Badge variant="secondary">
                               Archived
-                            </span>
+                            </Badge>
                           ) : null}
                         </div>
                       )}
-                      <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-[#667085]">
+                      <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
                         <span>{session.reviewCount} reviews</span>
                         <span>{session.sessionEstimatedValue} estimated</span>
                         <span>{session.unpricedItemCount} unpriced</span>
@@ -817,8 +840,8 @@ export function SessionDashboard() {
                           <span>Capture client connected</span>
                         ) : null}
                       </div>
-                      <div className="mt-3 grid gap-3 rounded-md border border-[#d9dee7] bg-[#f8fafc] p-3 md:grid-cols-[96px_minmax(0,1fr)]">
-                        <div className="flex h-24 w-24 items-center justify-center rounded-md border border-[#d9dee7] bg-white p-1">
+                      <div className="mt-3 grid gap-3 rounded-lg border bg-muted/40 p-3 md:grid-cols-[96px_minmax(0,1fr)]">
+                        <div className="flex h-24 w-24 items-center justify-center rounded-lg border bg-background p-1">
                           {session.joinQrSvg ? (
                             <div
                               className="h-full w-full"
@@ -829,17 +852,17 @@ export function SessionDashboard() {
                             />
                           ) : (
                             <QrCode
-                              className="h-9 w-9 text-[#98a2b3]"
+                              className="h-9 w-9 text-muted-foreground"
                               aria-hidden="true"
                             />
                           )}
                         </div>
                         <div className="min-w-0">
-                          <p className="text-sm font-semibold text-[#344054]">
+                          <p className="text-sm font-semibold">
                             Capture join link
                           </p>
                           <a
-                            className="mt-1 block break-all text-sm font-medium text-teal-800 hover:text-teal-900"
+                            className="mt-1 block break-all text-sm font-medium text-primary underline-offset-4 hover:underline"
                             href={captureHref(session)}
                           >
                             {session.joinUrl ?? captureHref(session)}
@@ -854,37 +877,38 @@ export function SessionDashboard() {
                       </div>
                     </div>
                     <div className="flex flex-wrap items-center gap-1.5 md:justify-end">
-                      <button
-                        className="inline-flex min-h-10 items-center justify-center gap-2 rounded-md bg-gray-900 px-3 font-semibold text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-60"
+                      <Button
+                        className="h-10"
                         type="button"
                         disabled={savingId === session.id}
                         onClick={() => void openManualEntry(session.id)}
                       >
                         <Plus className="h-4 w-4" aria-hidden="true" />
                         Manual
-                      </button>
-                      <a
-                        className="inline-flex min-h-10 items-center justify-center gap-2 rounded-md bg-teal-700 px-3 font-semibold !text-white hover:bg-teal-800"
-                        href={captureHref(session)}
-                      >
-                        <Play className="h-4 w-4 fill-current" aria-hidden="true" />
-                        Resume
-                      </a>
+                      </Button>
+                      <Button asChild className="h-10" variant="secondary">
+                        <a href={captureHref(session)}>
+                          <Play className="h-4 w-4 fill-current" aria-hidden="true" />
+                          Resume
+                        </a>
+                      </Button>
                       {editingId === session.id ? null : (
-                        <button
-                          className="inline-flex h-10 w-10 items-center justify-center rounded-md text-[#475467] hover:bg-[#f2f4f7] hover:text-[#101828] disabled:cursor-not-allowed disabled:opacity-60"
+                        <Button
                           type="button"
+                          variant="ghost"
+                          size="icon-lg"
                           disabled={savingId === session.id}
                           onClick={() => setEditingId(session.id)}
                           aria-label={`Rename ${session.name}`}
                           title="Rename"
                         >
                           <Pencil className="h-4 w-4" aria-hidden="true" />
-                        </button>
+                        </Button>
                       )}
-                      <button
-                        className="inline-flex h-10 w-10 items-center justify-center rounded-md text-[#475467] hover:bg-[#f2f4f7] hover:text-[#101828] disabled:cursor-not-allowed disabled:opacity-60"
+                      <Button
                         type="button"
+                        variant="ghost"
+                        size="icon-lg"
                         disabled={savingId === session.id}
                         onClick={() =>
                           void setArchived(session.id, !session.archivedAt)
@@ -901,62 +925,66 @@ export function SessionDashboard() {
                         ) : (
                           <Archive className="h-4 w-4" aria-hidden="true" />
                         )}
-                      </button>
+                      </Button>
                       {deletePendingId === session.id ? (
                         <>
-                          <button
-                            className="inline-flex min-h-10 items-center gap-2 rounded-md bg-red-700 px-3 font-semibold text-white hover:bg-red-800 disabled:cursor-not-allowed disabled:opacity-60"
+                          <Button
                             type="button"
+                            variant="destructive"
+                            className="h-10"
                             disabled={savingId === session.id}
                             onClick={() => void deleteSession(session.id)}
                           >
                             <Trash2 className="h-4 w-4" aria-hidden="true" />
                             Confirm delete
-                          </button>
-                          <button
-                            className="inline-flex h-10 w-10 items-center justify-center rounded-md text-[#475467] hover:bg-[#f2f4f7] hover:text-[#101828]"
+                          </Button>
+                          <Button
                             type="button"
+                            variant="ghost"
+                            size="icon-lg"
                             onClick={() => setDeletePendingId(null)}
                             aria-label="Cancel delete"
                             title="Cancel"
                           >
                             <X className="h-4 w-4" aria-hidden="true" />
-                          </button>
+                          </Button>
                         </>
                       ) : (
-                        <button
-                          className="inline-flex h-10 w-10 items-center justify-center rounded-md text-red-600 hover:bg-red-50 hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-60"
+                        <Button
                           type="button"
+                          variant="destructive"
+                          size="icon-lg"
                           disabled={savingId === session.id}
                           onClick={() => setDeletePendingId(session.id)}
                           aria-label={`Delete ${session.name}`}
                           title="Delete"
                         >
                           <Trash2 className="h-4 w-4" aria-hidden="true" />
-                        </button>
+                        </Button>
                       )}
                     </div>
                   </div>
                   {manualSessionId === session.id ? (
-                    <div className="mt-4 overflow-hidden rounded-md border border-[#cbd5e1] bg-[#f8fafc]">
-                      <div className="flex items-start justify-between gap-3 border-b border-[#e2e8f0] bg-white px-4 py-3">
+                    <div className="mt-4 overflow-hidden rounded-lg border bg-muted/40">
+                      <div className="flex items-start justify-between gap-3 border-b bg-background px-4 py-3">
                         <div>
-                          <h4 className="text-base font-bold text-[#101828]">
+                          <h4 className="text-base font-bold">
                             Manual entry
                           </h4>
-                          <p className="text-sm text-[#667085]">
+                          <p className="text-sm text-muted-foreground">
                             Search selects metadata. The fields below stay editable.
                           </p>
                         </div>
-                        <button
-                          className="inline-flex h-9 w-9 items-center justify-center rounded-md text-[#475467] hover:bg-[#f2f4f7]"
+                        <Button
                           type="button"
+                          variant="ghost"
+                          size="icon-lg"
                           onClick={() => setManualSessionId(null)}
                           aria-label="Close manual entry"
                           title="Close"
                         >
                           <X className="h-4 w-4" aria-hidden="true" />
-                        </button>
+                        </Button>
                       </div>
 
                       <div className="grid gap-4 p-4">
@@ -965,24 +993,24 @@ export function SessionDashboard() {
                           aria-labelledby={`manual-search-title-${session.id}`}
                         >
                           <h5
-                            className="mb-2 text-sm font-bold text-[#344054]"
+                            className="mb-2 text-sm font-bold"
                             id={`manual-search-title-${session.id}`}
                           >
                             Find card
                           </h5>
-                          <label
+                          <Label
                             className="sr-only"
                             htmlFor={`manual-search-${session.id}`}
                           >
                             Search card metadata for manual entry
-                          </label>
+                          </Label>
                           <div className="relative">
                             <Search
                               className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#667085]"
                               aria-hidden="true"
                             />
-                            <input
-                              className="min-h-10 w-full rounded-md border border-[#b8c2d2] pl-9 pr-3 text-base outline-none focus:border-[#667085]"
+                            <Input
+                              className="h-10 pl-9"
                               id={`manual-search-${session.id}`}
                               value={manualQuery}
                               onChange={(event) => {
@@ -990,12 +1018,12 @@ export function SessionDashboard() {
                                 setManualSuggestionsOpen(true);
                               }}
                               onFocus={() => setManualSuggestionsOpen(true)}
-                              placeholder="Type card, Set Code, or Passcode"
+                              placeholder="Type card, Set Code, or Serial Number"
                               autoComplete="off"
                             />
                           </div>
                           <div
-                            className={`absolute left-0 right-0 top-[72px] z-30 rounded-md border border-[#d9dee7] bg-white p-2 shadow-lg ${
+                            className={`absolute left-0 right-0 top-[72px] z-30 rounded-lg border bg-popover p-2 text-popover-foreground shadow-lg ${
                               manualSuggestionsOpen &&
                               (manualSearching ||
                                 manualResults.length > 0 ||
@@ -1006,11 +1034,11 @@ export function SessionDashboard() {
                           >
                             {manualQuery.trim().length > 0 &&
                             !shouldSuggestMetadata(manualQuery) ? (
-                              <p className="px-2 py-1.5 text-sm text-[#667085]">
+                              <p className="px-2 py-1.5 text-sm text-muted-foreground">
                                 Keep typing for suggestions.
                               </p>
                             ) : manualSearching ? (
-                              <p className="px-2 py-1.5 text-sm text-[#667085]">
+                              <p className="px-2 py-1.5 text-sm text-muted-foreground">
                                 Searching...
                               </p>
                             ) : manualResults.length > 0 ? (
@@ -1018,30 +1046,30 @@ export function SessionDashboard() {
                                 {manualResults.map((result) => (
                                   <li key={`${result.passcode}-${result.setCode ?? "card"}`}>
                                     <button
-                                      className="block w-full rounded-md px-3 py-2 text-left hover:bg-teal-50"
+                                      className="block w-full rounded-lg px-3 py-2 text-left hover:bg-accent"
                                       type="button"
                                       onClick={() => selectManualCandidate(result)}
                                     >
-                                      <span className="block truncate text-sm font-bold text-[#101828]">
+                                      <span className="block truncate text-sm font-bold">
                                         {result.name}
                                       </span>
-                                      <span className="mt-1 block text-sm text-[#667085]">
+                                      <span className="mt-1 block text-sm text-muted-foreground">
                                         {result.setCode ?? "No Set Code"} ·{" "}
                                         {result.rarity ?? "Unknown rarity"}
                                       </span>
-                                      <span className="mt-1 block text-xs text-[#667085]">
-                                        Passcode {result.passcode}
+                                      <span className="mt-1 block text-xs text-muted-foreground">
+                                        Serial Number {result.passcode}
                                       </span>
                                     </button>
                                   </li>
                                 ))}
                               </ul>
                             ) : shouldSuggestMetadata(manualQuery) ? (
-                              <p className="px-2 py-1.5 text-sm text-[#667085]">
+                              <p className="px-2 py-1.5 text-sm text-muted-foreground">
                                 No metadata matches yet.
                               </p>
                             ) : (
-                              <p className="px-2 py-1.5 text-sm text-[#667085]">
+                              <p className="px-2 py-1.5 text-sm text-muted-foreground">
                                 Suggestions appear as you type.
                               </p>
                             )}
@@ -1053,14 +1081,14 @@ export function SessionDashboard() {
                           onSubmit={(event) => void addManualItem(event, session.id)}
                         >
                           <section
-                            className="rounded-md border border-[#d9dee7] bg-white p-4"
+                            className="rounded-lg border bg-background p-4"
                             aria-label="Manual card fields"
                           >
                             <div className="grid gap-3 md:grid-cols-6">
-                              <label className="grid gap-1 text-sm font-semibold text-[#344054] md:col-span-4">
+                              <Label className="grid gap-1 text-sm font-semibold md:col-span-4">
                                 Card name
-                                <input
-                                  className="min-h-10 rounded-md border border-[#b8c2d2] px-3 text-base font-normal text-[#101828] outline-none focus:border-[#667085]"
+                                <Input
+                                  className="h-10 font-normal"
                                   required
                                   value={manualForm.cardName}
                                   onChange={(event) =>
@@ -1070,11 +1098,11 @@ export function SessionDashboard() {
                                     }))
                                   }
                                 />
-                              </label>
-                              <label className="grid gap-1 text-sm font-semibold text-[#344054] md:col-span-2">
+                              </Label>
+                              <Label className="grid gap-1 text-sm font-semibold md:col-span-2">
                                 Quantity
-                                <input
-                                  className="min-h-10 rounded-md border border-[#b8c2d2] px-3 text-base font-normal text-[#101828] outline-none focus:border-[#667085]"
+                                <Input
+                                  className="h-10 font-normal"
                                   min={1}
                                   max={999}
                                   required
@@ -1087,11 +1115,11 @@ export function SessionDashboard() {
                                     }))
                                   }
                                 />
-                              </label>
-                              <label className="grid gap-1 text-sm font-semibold text-[#344054] md:col-span-2">
+                              </Label>
+                              <Label className="grid gap-1 text-sm font-semibold md:col-span-2">
                                 Set Code
-                                <input
-                                  className="min-h-10 rounded-md border border-[#b8c2d2] px-3 text-base font-normal text-[#101828] outline-none focus:border-[#667085]"
+                                <Input
+                                  className="h-10 font-normal"
                                   required
                                   value={manualForm.setCode}
                                   onChange={(event) =>
@@ -1101,11 +1129,11 @@ export function SessionDashboard() {
                                     }))
                                   }
                                 />
-                              </label>
-                              <label className="grid gap-1 text-sm font-semibold text-[#344054] md:col-span-2">
-                                Passcode
-                                <input
-                                  className="min-h-10 rounded-md border border-[#b8c2d2] px-3 text-base font-normal text-[#101828] outline-none focus:border-[#667085]"
+                              </Label>
+                              <Label className="grid gap-1 text-sm font-semibold md:col-span-2">
+                                Serial Number
+                                <Input
+                                  className="h-10 font-normal"
                                   required
                                   value={manualForm.passcode}
                                   onChange={(event) =>
@@ -1115,13 +1143,13 @@ export function SessionDashboard() {
                                     }))
                                   }
                                 />
-                              </label>
-                              <div className="relative grid gap-1 text-sm font-semibold text-[#344054] md:col-span-2">
-                                <label htmlFor={`manual-rarity-${session.id}`}>
+                              </Label>
+                              <div className="relative grid gap-1 text-sm font-semibold md:col-span-2">
+                                <Label htmlFor={`manual-rarity-${session.id}`}>
                                   Rarity
-                                </label>
-                                <input
-                                  className="min-h-10 rounded-md border border-[#b8c2d2] px-3 text-base font-normal text-[#101828] outline-none focus:border-[#667085]"
+                                </Label>
+                                <Input
+                                  className="h-10 font-normal"
                                   id={`manual-rarity-${session.id}`}
                                   required
                                   value={manualForm.rarity}
@@ -1139,10 +1167,10 @@ export function SessionDashboard() {
                                 />
                                 {raritySuggestionsOpen &&
                                 manualRarityOptions.length > 0 ? (
-                                  <div className="absolute left-0 right-0 top-full z-30 mt-1 rounded-md border border-[#d9dee7] bg-white p-1 shadow-lg">
+                                  <div className="absolute left-0 right-0 top-full z-30 mt-1 rounded-lg border bg-popover p-1 text-popover-foreground shadow-lg">
                                     {manualRarityOptions.map((option) => (
                                       <button
-                                        className="block w-full rounded px-2 py-1.5 text-left text-sm font-medium text-[#344054] hover:bg-teal-50"
+                                        className="block w-full rounded-md px-2 py-1.5 text-left text-sm font-medium hover:bg-accent"
                                         key={option.value}
                                         type="button"
                                         onClick={() => {
@@ -1159,28 +1187,33 @@ export function SessionDashboard() {
                                   </div>
                                 ) : null}
                               </div>
-                              <label className="grid gap-1 text-sm font-semibold text-[#344054] md:col-span-2">
+                              <Label className="grid gap-1 text-sm font-semibold md:col-span-2">
                                 Edition
-                                <select
-                                  className="min-h-10 rounded-md border border-[#b8c2d2] px-3 text-base font-normal text-[#101828] outline-none focus:border-[#667085]"
+                                <Select
                                   value={manualForm.edition}
-                                  onChange={(event) =>
+                                  onValueChange={(value) =>
                                     setManualForm((current) => ({
                                       ...current,
-                                      edition: event.target
-                                        .value as ManualEntryForm["edition"],
+                                      edition: value as ManualEntryForm["edition"],
                                     }))
                                   }
                                 >
+                                  <SelectTrigger className="h-10 w-full font-normal">
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
                                   {CARD_EDITIONS.map((edition) => (
-                                    <option key={edition}>{edition}</option>
+                                    <SelectItem key={edition} value={edition}>
+                                      {edition}
+                                    </SelectItem>
                                   ))}
-                                </select>
-                              </label>
-                              <label className="grid gap-1 text-sm font-semibold text-[#344054] md:col-span-2">
+                                  </SelectContent>
+                                </Select>
+                              </Label>
+                              <Label className="grid gap-1 text-sm font-semibold md:col-span-2">
                                 Language
-                                <input
-                                  className="min-h-10 rounded-md border border-[#b8c2d2] px-3 text-base font-normal text-[#101828] outline-none focus:border-[#667085]"
+                                <Input
+                                  className="h-10 font-normal"
                                   required
                                   value={manualForm.language}
                                   onChange={(event) =>
@@ -1190,37 +1223,42 @@ export function SessionDashboard() {
                                     }))
                                   }
                                 />
-                              </label>
-                              <label className="grid gap-1 text-sm font-semibold text-[#344054] md:col-span-2">
+                              </Label>
+                              <Label className="grid gap-1 text-sm font-semibold md:col-span-2">
                                 Condition
-                                <select
-                                  className="min-h-10 rounded-md border border-[#b8c2d2] px-3 text-base font-normal text-[#101828] outline-none focus:border-[#667085]"
+                                <Select
                                   value={manualForm.condition}
-                                  onChange={(event) =>
+                                  onValueChange={(value) =>
                                     setManualForm((current) => ({
                                       ...current,
-                                      condition: event.target
-                                        .value as ManualEntryForm["condition"],
+                                      condition: value as ManualEntryForm["condition"],
                                     }))
                                   }
                                 >
+                                  <SelectTrigger className="h-10 w-full font-normal">
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
                                   {CARD_CONDITIONS.map((condition) => (
-                                    <option key={condition}>{condition}</option>
+                                    <SelectItem key={condition} value={condition}>
+                                      {condition}
+                                    </SelectItem>
                                   ))}
-                                </select>
-                              </label>
+                                  </SelectContent>
+                                </Select>
+                              </Label>
                             </div>
                           </section>
                           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                            <button
-                              className="inline-flex min-h-10 w-fit items-center justify-center gap-2 rounded-md bg-teal-700 px-4 font-semibold text-white hover:bg-teal-800 disabled:cursor-not-allowed disabled:opacity-60"
+                            <Button
+                              className="h-10 w-fit"
                               type="submit"
                               disabled={manualSaving}
                             >
                               <Plus className="h-4 w-4" aria-hidden="true" />
                               Add card
-                            </button>
-                            <p className="text-sm text-[#667085]">
+                            </Button>
+                            <p className="text-sm text-muted-foreground">
                               Added here without Best Frame evidence.
                             </p>
                           </div>
@@ -1230,7 +1268,7 @@ export function SessionDashboard() {
                   ) : null}
 
                   {sessionItems[session.id] !== undefined ? (
-                        <div className="mt-4 grid gap-5 rounded-md border border-[#e2e8f0] bg-white px-4 py-4">
+                        <div className="mt-4 grid gap-5 rounded-lg border bg-background px-4 py-4">
                           {(() => {
                             const items = sessionItems[session.id] ?? [];
                             const reviewItems = items.filter(
@@ -1243,59 +1281,58 @@ export function SessionDashboard() {
 
                             const renderItemForm = (item: SessionItem) => (
                               <li
-                                className="rounded-md border border-[#e4e7ec] bg-white p-3"
+                                className="rounded-lg border bg-background p-3"
                                 key={item.id}
                               >
                                 <div className="mb-3 flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
                                   <div className="min-w-0">
                                     <div className="flex flex-wrap items-center gap-2">
                                       {item.reviewReason === "Rarity Review" ? (
-                                        <label className="flex items-center gap-2 text-sm font-semibold text-[#344054]">
-                                          <input
-                                            className="h-4 w-4 accent-teal-700"
-                                            type="checkbox"
+                                        <Label className="flex items-center gap-2 text-sm font-semibold">
+                                          <Checkbox
                                             checked={(selectedReviewItemIds[session.id] ?? []).includes(
                                               item.id,
                                             )}
-                                            onChange={() =>
+                                            onCheckedChange={() =>
                                               toggleReviewSelection(session.id, item.id)
                                             }
                                           />
                                           Select
-                                        </label>
+                                        </Label>
                                       ) : null}
-                                      <span className="font-bold text-[#101828]">
+                                      <span className="font-bold">
                                         {item.quantity}x {item.cardName}
                                       </span>
                                       {item.reviewReason ? (
-                                        <span className="rounded-full bg-amber-50 px-2 py-1 text-xs font-bold text-amber-700">
+                                        <Badge variant="secondary">
                                           {item.reviewReason}
-                                        </span>
+                                        </Badge>
                                       ) : (
-                                        <span className="rounded-full bg-emerald-50 px-2 py-1 text-xs font-bold text-emerald-700">
+                                        <Badge variant="outline">
                                           Successfully Scanned
-                                        </span>
+                                        </Badge>
                                       )}
                                     </div>
-                                    <p className="mt-1 text-sm text-[#667085]">
+                                    <p className="mt-1 text-sm text-muted-foreground">
                                       {item.setCode} · {item.rarity} · {item.edition} ·{" "}
                                       {item.condition} · {item.language}
                                     </p>
                                   </div>
                                   <div className="flex flex-wrap items-center gap-2 md:justify-end">
                                     {formatSnapshotAmount(item) ? (
-                                      <span className="rounded-full bg-emerald-50 px-2 py-1 text-xs font-bold text-emerald-700">
+                                      <Badge variant="outline">
                                         {formatSnapshotAmount(item)}
-                                      </span>
+                                      </Badge>
                                     ) : (
-                                      <span className="rounded-full bg-amber-50 px-2 py-1 text-xs font-bold text-amber-700">
+                                      <Badge variant="secondary">
                                         {item.pricingIssue ?? "No price found"}
-                                      </span>
+                                      </Badge>
                                     )}
                                     {item.reviewReason === "Rarity Review" ? (
-                                      <button
-                                        className="inline-flex min-h-8 items-center justify-center gap-1.5 rounded-md bg-teal-700 px-2.5 text-xs font-bold text-white hover:bg-teal-800 disabled:cursor-not-allowed disabled:opacity-60"
+                                      <Button
+                                        className="h-8"
                                         type="button"
+                                        size="sm"
                                         disabled={itemSavingId === item.id}
                                         onClick={() =>
                                           void confirmItemRarity(session.id, item.id)
@@ -1303,11 +1340,12 @@ export function SessionDashboard() {
                                       >
                                         <Check className="h-3.5 w-3.5" aria-hidden="true" />
                                         Confirm rarity
-                                      </button>
+                                      </Button>
                                     ) : null}
-                                    <button
-                                      className="inline-flex h-8 w-8 items-center justify-center rounded-md text-[#475467] hover:bg-[#f2f4f7] disabled:cursor-not-allowed disabled:opacity-60"
+                                    <Button
                                       type="button"
+                                      variant="ghost"
+                                      size="icon"
                                       disabled={pricingRefreshingId === item.id}
                                       onClick={() =>
                                         void refreshItemPricing(session.id, item.id)
@@ -1323,7 +1361,7 @@ export function SessionDashboard() {
                                         }`}
                                         aria-hidden="true"
                                       />
-                                    </button>
+                                    </Button>
                                   </div>
                                 </div>
                                 <form
@@ -1332,62 +1370,76 @@ export function SessionDashboard() {
                                     void updateSessionItem(event, session.id, item)
                                   }
                                 >
-                                  <label className="grid gap-1 text-xs font-bold text-[#344054] md:col-span-4">
+                                  <Label className="grid gap-1 text-xs font-bold md:col-span-4">
                                     Card name
-                                    <input className="min-h-9 rounded-md border border-[#b8c2d2] px-2 text-sm font-normal text-[#101828]" name="cardName" defaultValue={item.cardName} required />
-                                  </label>
-                                  <label className="grid gap-1 text-xs font-bold text-[#344054] md:col-span-2">
+                                    <Input className="h-9 font-normal" name="cardName" defaultValue={item.cardName} required />
+                                  </Label>
+                                  <Label className="grid gap-1 text-xs font-bold md:col-span-2">
                                     Quantity
-                                    <input className="min-h-9 rounded-md border border-[#b8c2d2] px-2 text-sm font-normal text-[#101828]" name="quantity" defaultValue={item.quantity} min={1} max={999} type="number" required />
-                                  </label>
-                                  <label className="grid gap-1 text-xs font-bold text-[#344054] md:col-span-2">
+                                    <Input className="h-9 font-normal" name="quantity" defaultValue={item.quantity} min={1} max={999} type="number" required />
+                                  </Label>
+                                  <Label className="grid gap-1 text-xs font-bold md:col-span-2">
                                     Set Code
-                                    <input className="min-h-9 rounded-md border border-[#b8c2d2] px-2 text-sm font-normal text-[#101828]" name="setCode" defaultValue={item.setCode} required />
-                                  </label>
-                                  <label className="grid gap-1 text-xs font-bold text-[#344054] md:col-span-2">
-                                    Passcode
-                                    <input className="min-h-9 rounded-md border border-[#b8c2d2] px-2 text-sm font-normal text-[#101828]" name="passcode" defaultValue={item.passcode} required />
-                                  </label>
-                                  <label className="grid gap-1 text-xs font-bold text-[#344054] md:col-span-2">
+                                    <Input className="h-9 font-normal" name="setCode" defaultValue={item.setCode} required />
+                                  </Label>
+                                  <Label className="grid gap-1 text-xs font-bold md:col-span-2">
+                                    Serial Number
+                                    <Input className="h-9 font-normal" name="passcode" defaultValue={item.passcode} required />
+                                  </Label>
+                                  <Label className="grid gap-1 text-xs font-bold md:col-span-2">
                                     Rarity
-                                    <input className="min-h-9 rounded-md border border-[#b8c2d2] px-2 text-sm font-normal text-[#101828]" name="rarity" defaultValue={item.rarity} required />
-                                  </label>
-                                  <label className="grid gap-1 text-xs font-bold text-[#344054] md:col-span-2">
+                                    <Input className="h-9 font-normal" name="rarity" defaultValue={item.rarity} required />
+                                  </Label>
+                                  <Label className="grid gap-1 text-xs font-bold md:col-span-2">
                                     Edition
-                                    <select className="min-h-9 rounded-md border border-[#b8c2d2] px-2 text-sm font-normal text-[#101828]" name="edition" defaultValue={item.edition}>
+                                    <Select name="edition" defaultValue={item.edition}>
+                                      <SelectTrigger className="h-9 w-full font-normal">
+                                        <SelectValue />
+                                      </SelectTrigger>
+                                      <SelectContent>
                                       {CARD_EDITIONS.map((edition) => (
-                                        <option key={edition}>{edition}</option>
+                                        <SelectItem key={edition} value={edition}>
+                                          {edition}
+                                        </SelectItem>
                                       ))}
-                                    </select>
-                                  </label>
-                                  <label className="grid gap-1 text-xs font-bold text-[#344054] md:col-span-2">
+                                      </SelectContent>
+                                    </Select>
+                                  </Label>
+                                  <Label className="grid gap-1 text-xs font-bold md:col-span-2">
                                     Language
-                                    <input className="min-h-9 rounded-md border border-[#b8c2d2] px-2 text-sm font-normal text-[#101828]" name="language" defaultValue={item.language} required />
-                                  </label>
-                                  <label className="grid gap-1 text-xs font-bold text-[#344054] md:col-span-2">
+                                    <Input className="h-9 font-normal" name="language" defaultValue={item.language} required />
+                                  </Label>
+                                  <Label className="grid gap-1 text-xs font-bold md:col-span-2">
                                     Condition
-                                    <select className="min-h-9 rounded-md border border-[#b8c2d2] px-2 text-sm font-normal text-[#101828]" name="condition" defaultValue={item.condition}>
+                                    <Select name="condition" defaultValue={item.condition}>
+                                      <SelectTrigger className="h-9 w-full font-normal">
+                                        <SelectValue />
+                                      </SelectTrigger>
+                                      <SelectContent>
                                       {CARD_CONDITIONS.map((condition) => (
-                                        <option key={condition}>{condition}</option>
+                                        <SelectItem key={condition} value={condition}>
+                                          {condition}
+                                        </SelectItem>
                                       ))}
-                                    </select>
-                                  </label>
+                                      </SelectContent>
+                                    </Select>
+                                  </Label>
                                   <div className="flex flex-wrap items-end gap-3 md:col-span-4">
-                                    <label className="flex min-h-9 items-center gap-2 text-xs font-bold text-[#344054]">
-                                      <input className="h-4 w-4 accent-teal-700" name="printingIdentityTrusted" type="checkbox" defaultChecked={item.printingIdentityTrusted} />
+                                    <Label className="flex min-h-9 items-center gap-2 text-xs font-bold">
+                                      <Checkbox name="printingIdentityTrusted" defaultChecked={item.printingIdentityTrusted} />
                                       Trusted identity
-                                    </label>
-                                    <label className="flex min-h-9 items-center gap-2 text-xs font-bold text-[#344054]">
-                                      <input className="h-4 w-4 accent-teal-700" name="rarityConfirmed" type="checkbox" defaultChecked={Boolean(item.rarityConfirmedAt)} />
+                                    </Label>
+                                    <Label className="flex min-h-9 items-center gap-2 text-xs font-bold">
+                                      <Checkbox name="rarityConfirmed" defaultChecked={Boolean(item.rarityConfirmedAt)} />
                                       Rarity confirmed
-                                    </label>
-                                    <button
-                                      className="inline-flex min-h-9 items-center justify-center rounded-md bg-gray-900 px-3 text-sm font-semibold text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-60"
+                                    </Label>
+                                    <Button
+                                      className="h-9"
                                       type="submit"
                                       disabled={itemSavingId === item.id}
                                     >
                                       Save correction
-                                    </button>
+                                    </Button>
                                   </div>
                                 </form>
                               </li>
@@ -1399,17 +1451,17 @@ export function SessionDashboard() {
                                   <div className="mb-3 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
                                     <div>
                                       <h5
-                                        className="text-sm font-bold text-[#344054]"
+                                        className="text-sm font-bold"
                                         id={`review-items-${session.id}`}
                                       >
                                         Requires Review
                                       </h5>
-                                      <p className="text-sm text-[#667085]">
+                                      <p className="text-sm text-muted-foreground">
                                         Confirm rarity or correct trusted identity fields.
                                       </p>
                                     </div>
-                                    <button
-                                      className="inline-flex min-h-9 w-fit items-center justify-center gap-2 rounded-md bg-teal-700 px-3 text-sm font-semibold text-white hover:bg-teal-800 disabled:cursor-not-allowed disabled:opacity-60"
+                                    <Button
+                                      className="h-9 w-fit"
                                       type="button"
                                       disabled={
                                         !bulkSelection.allowed ||
@@ -1422,21 +1474,21 @@ export function SessionDashboard() {
                                     >
                                       <Check className="h-4 w-4" aria-hidden="true" />
                                       Confirm selected similar rarities
-                                    </button>
+                                    </Button>
                                   </div>
                                   {reviewItems.length > 0 ? (
                                     <ul className="grid gap-3 p-0">
                                       {reviewItems.map(renderItemForm)}
                                     </ul>
                                   ) : (
-                                    <p className="rounded-md border border-[#e4e7ec] px-3 py-4 text-sm text-[#667085]">
+                                    <p className="rounded-lg border px-3 py-4 text-sm text-muted-foreground">
                                       No items require review.
                                     </p>
                                   )}
                                 </section>
                                 <section aria-labelledby={`success-items-${session.id}`}>
                                   <h5
-                                    className="mb-3 text-sm font-bold text-[#344054]"
+                                    className="mb-3 text-sm font-bold"
                                     id={`success-items-${session.id}`}
                                   >
                                     Successfully Scanned
@@ -1446,7 +1498,7 @@ export function SessionDashboard() {
                                       {successItems.map(renderItemForm)}
                                     </ul>
                                   ) : (
-                                    <p className="rounded-md border border-[#e4e7ec] px-3 py-4 text-sm text-[#667085]">
+                                    <p className="rounded-lg border px-3 py-4 text-sm text-muted-foreground">
                                       Confirm required review fields to move items here.
                                     </p>
                                   )}
@@ -1460,8 +1512,11 @@ export function SessionDashboard() {
               ))}
             </ul>
           )}
-        </section>
+          </CardContent>
+        </Card>
       </section>
     </main>
   );
 }
+
+export default SessionDashboard;

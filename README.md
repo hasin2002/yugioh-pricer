@@ -12,6 +12,13 @@ npm run db:migrate
 
 The first slice uses Next.js, Tailwind CSS v4, tRPC, Drizzle, and SQLite.
 
+## Design foundation
+
+The app uses shadcn/ui primitives in `src/components/ui` with Tailwind CSS v4.
+The theme is neutral/slate with white work surfaces, dark slate primary actions,
+and a restrained teal focus/accent token. Keep new feature styling on shadcn
+components first, then add local Tailwind utilities for layout and density.
+
 ## iPhone HTTPS camera smoke test
 
 The capture client is available at `/capture`. iPhone Safari requires a secure
