@@ -18,3 +18,16 @@ export const bestFrames = sqliteTable("best_frames", {
     .default(sql`(unixepoch())`)
     .notNull(),
 });
+
+export const pricingSessions = sqliteTable("pricing_sessions", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  name: text("name").notNull(),
+  archivedAt: integer("archived_at", { mode: "timestamp" }),
+  reviewCount: integer("review_count").default(0).notNull(),
+  createdAt: integer("created_at", { mode: "timestamp" })
+    .default(sql`(unixepoch())`)
+    .notNull(),
+  updatedAt: integer("updated_at", { mode: "timestamp" })
+    .default(sql`(unixepoch())`)
+    .notNull(),
+});
