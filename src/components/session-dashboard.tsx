@@ -6,7 +6,6 @@ import {
   Archive,
   ArchiveRestore,
   Check,
-  Database,
   Pencil,
   Play,
   Plus,
@@ -620,43 +619,26 @@ export function SessionDashboard() {
           className="mb-6 rounded-lg"
           aria-labelledby="metadata-cache-title"
         >
-          <CardHeader>
-            <div className="min-w-0">
-              <CardTitle
-                className="flex items-center gap-2 text-[17px]"
-                id="metadata-cache-title"
-              >
-                <Database className="h-5 w-5 text-primary" aria-hidden="true" />
-                Card metadata cache
-              </CardTitle>
-              <CardDescription>
-                {metadataStatus?.lastRefreshedAt
-                  ? `Updated ${formatDate(metadataStatus.lastRefreshedAt)} · ${metadataStatus.cardCount.toLocaleString()} cards · ${metadataStatus.printingCount.toLocaleString()} printings`
-                  : "No local card metadata has been cached yet."}
-              </CardDescription>
+          <CardContent className="grid gap-3 pt-4">
+            <div className="flex flex-col gap-1 md:flex-row md:items-end md:justify-between">
+              <div>
+                <CardTitle
+                  className="flex items-center gap-2 text-[17px]"
+                  id="metadata-cache-title"
+                >
+                  <Search className="h-5 w-5 text-primary" aria-hidden="true" />
+                  Card lookup
+                </CardTitle>
+                <CardDescription>
+                  Search card identities by name, Set Code, or Serial Number.
+                </CardDescription>
+              </div>
               {metadataStatus?.refreshRecommended ? (
-                <p className="mt-1 text-sm font-semibold text-amber-700">
-                  Refresh recommended
+                <p className="text-sm font-semibold text-amber-700">
+                  Card data refresh recommended
                 </p>
               ) : null}
             </div>
-            <CardAction>
-            <Button
-              type="button"
-              size="lg"
-              disabled={metadataRefreshing}
-              onClick={() => void refreshMetadata()}
-            >
-              <RefreshCw
-                className={`h-4 w-4 ${metadataRefreshing ? "animate-spin" : ""}`}
-                aria-hidden="true"
-              />
-              Refresh
-            </Button>
-            </CardAction>
-          </CardHeader>
-
-          <CardContent>
             <form
               className="flex flex-col gap-2 md:flex-row"
               onSubmit={(event) => void searchMetadata(event)}
@@ -676,6 +658,27 @@ export function SessionDashboard() {
                 Search
               </Button>
             </form>
+            <div className="flex flex-col gap-2 text-xs text-muted-foreground md:flex-row md:items-center md:justify-between">
+              <span>
+                {metadataStatus?.lastRefreshedAt
+                  ? `Card data updated ${formatDate(metadataStatus.lastRefreshedAt)}`
+                  : "Card data will refresh before lookup results are used."}
+              </span>
+              <Button
+                className="h-8 w-fit"
+                type="button"
+                size="sm"
+                variant="ghost"
+                disabled={metadataRefreshing}
+                onClick={() => void refreshMetadata()}
+              >
+                <RefreshCw
+                  className={`h-4 w-4 ${metadataRefreshing ? "animate-spin" : ""}`}
+                  aria-hidden="true"
+                />
+                Refresh card data
+              </Button>
+            </div>
 
           {metadataSearching ? (
             <div className="mt-4 border-t pt-4 text-sm text-muted-foreground">

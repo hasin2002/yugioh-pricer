@@ -37,4 +37,14 @@ describe("shadcn design foundation", () => {
       "h-10 !text-primary-foreground hover:!text-primary-foreground",
     );
   });
+
+  it("keeps implementation cache details out of the primary dashboard language", () => {
+    const dashboard = readFileSync(
+      "src/components/session-dashboard.tsx",
+      "utf8",
+    );
+
+    expect(dashboard).toContain("Card lookup");
+    expect(dashboard).not.toContain("Card metadata cache");
+  });
 });
