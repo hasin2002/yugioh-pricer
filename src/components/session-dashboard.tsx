@@ -6,9 +6,12 @@ import {
   Archive,
   ArchiveRestore,
   Check,
+  Database,
   Pencil,
   Play,
   QrCode,
+  RefreshCw,
+  Search,
   Trash2,
   X,
 } from "lucide-react";
@@ -20,6 +23,8 @@ import type { AppRouter } from "@/server/api/root";
 type RouterOutputs = inferRouterOutputs<AppRouter>;
 type Session = RouterOutputs["sessions"]["list"][number];
 type Summary = RouterOutputs["sessions"]["summary"];
+type CardMetadataStatus = RouterOutputs["cards"]["metadataStatus"];
+type CardMetadataResult = RouterOutputs["cards"]["searchMetadata"][number];
 
 const formatter = new Intl.DateTimeFormat("en-GB", {
   dateStyle: "medium",
@@ -42,6 +47,14 @@ export function SessionDashboard() {
   const [savingId, setSavingId] = useState<number | null>(null);
   const [deletePendingId, setDeletePendingId] = useState<number | null>(null);
   const [editingId, setEditingId] = useState<number | null>(null);
+  const [metadataStatus, setMetadataStatus] =
+    useState<CardMetadataStatus | null>(null);
+  const [metadataRefreshing, setMetadataRefreshing] = useState(false);
+  const [metadataQuery, setMetadataQuery] = useState("");
+  const [metadataResults, setMetadataResults] = useState<CardMetadataResult[]>(
+    [],
+  );
+  const [metadataSearching, setMetadataSearching] = useState(false);
 
   const trpc = useMemo(
     () =>
@@ -69,6 +82,43 @@ export function SessionDashboard() {
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  const refreshMetadataStatus = useCallback(async () => {
+    setMetadataStatus(await trpc.cards.metadataStatus.query());
+  }, [trpc]);
+
+  useEffect(() => {
+    void refreshMetadataStatus();
+  }, [refreshMetadataStatus]);
+
+  async function refreshMetadata() {
+    setMetadataRefreshing(true);
+    try {
+      const status = await trpc.cards.refreshMetadata.mutate();
+      setMetadataStatus(status);
+    } finally {
+      setMetadataRefreshing(false);
+    }
+  }
+
+  async function searchMetadata(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const query = metadataQuery.trim();
+
+    if (!query) {
+      setMetadataResults([]);
+      return;
+    }
+
+    setMetadataSearching(true);
+    try {
+      const results = await trpc.cards.searchMetadata.query({ query });
+      setMetadataResults(results);
+      await refreshMetadataStatus();
+    } finally {
+      setMetadataSearching(false);
+    }
+  }
 
   async function createSession() {
     setSavingId(0);
@@ -233,6 +283,102 @@ export function SessionDashboard() {
               {summary?.archivedSessionCount ?? 0} archived
             </p>
           </article>
+        </section>
+
+        <section
+          className="mb-6 rounded-lg border border-[#d9dee7] bg-white p-5"
+          aria-labelledby="metadata-cache-title"
+        >
+          <div className="mb-4 flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+            <div>
+              <h2
+                className="mb-1 flex items-center gap-2 text-[17px] font-bold"
+                id="metadata-cache-title"
+              >
+                <Database className="h-5 w-5 text-teal-700" aria-hidden="true" />
+                Card metadata cache
+              </h2>
+              <p className="text-sm text-[#667085]">
+                {metadataStatus?.lastRefreshedAt
+                  ? `Updated ${formatDate(metadataStatus.lastRefreshedAt)} · ${metadataStatus.cardCount.toLocaleString()} cards · ${metadataStatus.printingCount.toLocaleString()} printings`
+                  : "No local card metadata has been cached yet."}
+              </p>
+              {metadataStatus?.refreshRecommended ? (
+                <p className="mt-1 text-sm font-semibold text-amber-700">
+                  Refresh recommended
+                </p>
+              ) : null}
+            </div>
+            <button
+              className="inline-flex min-h-10 items-center justify-center gap-2 rounded-md bg-gray-900 px-3 text-sm font-semibold text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-60"
+              type="button"
+              disabled={metadataRefreshing}
+              onClick={() => void refreshMetadata()}
+            >
+              <RefreshCw
+                className={`h-4 w-4 ${metadataRefreshing ? "animate-spin" : ""}`}
+                aria-hidden="true"
+              />
+              Refresh
+            </button>
+          </div>
+
+          <form
+            className="flex flex-col gap-2 md:flex-row"
+            onSubmit={(event) => void searchMetadata(event)}
+          >
+            <label className="sr-only" htmlFor="metadata-search">
+              Search card metadata
+            </label>
+            <input
+              className="min-h-10 min-w-0 flex-1 rounded-md border border-[#b8c2d2] px-3 text-base outline-none focus:border-[#667085]"
+              id="metadata-search"
+              value={metadataQuery}
+              onChange={(event) => setMetadataQuery(event.target.value)}
+              placeholder="Search by name, Set Code, or Passcode"
+            />
+            <button
+              className="inline-flex min-h-10 items-center justify-center gap-2 rounded-md bg-teal-700 px-4 font-semibold text-white hover:bg-teal-800 disabled:cursor-not-allowed disabled:opacity-60"
+              type="submit"
+              disabled={metadataSearching}
+            >
+              <Search className="h-4 w-4" aria-hidden="true" />
+              Search
+            </button>
+          </form>
+
+          {metadataSearching ? (
+            <div className="mt-4 border-t border-[#eaecf0] pt-4 text-sm text-[#667085]">
+              Searching metadata...
+            </div>
+          ) : metadataResults.length > 0 ? (
+            <ul className="mt-4 divide-y divide-[#eaecf0] border-t border-[#eaecf0] p-0">
+              {metadataResults.map((result) => (
+                <li
+                  className="grid gap-3 py-3 md:grid-cols-[minmax(0,1fr)_auto]"
+                  key={`${result.passcode}-${result.setCode ?? "card"}`}
+                >
+                  <div className="min-w-0">
+                    <p className="truncate font-bold">{result.name}</p>
+                    <p className="text-sm text-[#667085]">
+                      Passcode {result.passcode}
+                      {result.setCode
+                        ? ` · ${result.setCode} · ${result.rarity ?? "Unknown rarity"}`
+                        : ""}
+                    </p>
+                    {result.setName ? (
+                      <p className="mt-1 text-sm text-[#667085]">
+                        {result.setName}
+                      </p>
+                    ) : null}
+                  </div>
+                  <span className="self-start rounded-full bg-amber-50 px-2 py-1 text-xs font-semibold text-amber-700">
+                    Pricing required
+                  </span>
+                </li>
+              ))}
+            </ul>
+          ) : null}
         </section>
 
         <section

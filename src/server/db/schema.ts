@@ -36,3 +36,33 @@ export const pricingSessions = sqliteTable("pricing_sessions", {
     .default(sql`(unixepoch())`)
     .notNull(),
 });
+
+export const cardMetadataCards = sqliteTable("card_metadata_cards", {
+  passcode: text("passcode").primaryKey().notNull(),
+  name: text("name").notNull(),
+  normalizedName: text("normalized_name").notNull(),
+  cardType: text("card_type").notNull(),
+  frameType: text("frame_type"),
+  description: text("description"),
+  race: text("race"),
+  attribute: text("attribute"),
+  imageUrl: text("image_url"),
+  updatedAt: integer("updated_at", { mode: "timestamp" })
+    .default(sql`(unixepoch())`)
+    .notNull(),
+});
+
+export const cardMetadataPrintings = sqliteTable("card_metadata_printings", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  passcode: text("passcode")
+    .notNull()
+    .references(() => cardMetadataCards.passcode, { onDelete: "cascade" }),
+  setName: text("set_name").notNull(),
+  setCode: text("set_code").notNull().unique(),
+  rarity: text("rarity"),
+  rarityCode: text("rarity_code"),
+  sourceSetPrice: text("source_set_price"),
+  updatedAt: integer("updated_at", { mode: "timestamp" })
+    .default(sql`(unixepoch())`)
+    .notNull(),
+});

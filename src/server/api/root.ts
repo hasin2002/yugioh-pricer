@@ -1,4 +1,10 @@
 import { publicProcedure, router } from "@/server/api/trpc";
+import {
+  ensureCardMetadataFresh,
+  getCardMetadataStatus,
+  refreshCardMetadataCache,
+  searchCardMetadata,
+} from "@/server/cards/metadata-cache";
 import { pricingSessions } from "@/server/db/schema";
 import { desc, eq, isNull } from "drizzle-orm";
 import QRCode from "qrcode";
@@ -21,6 +27,10 @@ const joinSessionInputSchema = z.object({
   joinCode: z.string().trim().min(1),
   clientId: z.string().trim().min(8).max(128),
   replaceExisting: z.boolean().default(false),
+});
+
+const cardSearchInputSchema = z.object({
+  query: z.string().trim().min(1).max(120),
 });
 
 function automaticSessionName(now = new Date()) {
@@ -109,6 +119,21 @@ export const appRouter = router({
       client: input.client,
       message: "Typed API path ready",
     })),
+  }),
+  cards: router({
+    metadataStatus: publicProcedure.query(({ ctx }) =>
+      getCardMetadataStatus(ctx.db),
+    ),
+    refreshMetadata: publicProcedure.mutation(({ ctx }) =>
+      refreshCardMetadataCache(ctx.db),
+    ),
+    searchMetadata: publicProcedure
+      .input(cardSearchInputSchema)
+      .query(async ({ ctx, input }) => {
+        await ensureCardMetadataFresh(ctx.db);
+
+        return searchCardMetadata(ctx.db, input.query);
+      }),
   }),
   sessions: router({
     list: publicProcedure
