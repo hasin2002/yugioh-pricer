@@ -50,6 +50,31 @@ function createTestCaller() {
       source_set_price text,
       updated_at integer DEFAULT (unixepoch()) NOT NULL
     );
+
+    CREATE TABLE best_frames (
+      id integer PRIMARY KEY AUTOINCREMENT NOT NULL,
+      storage_path text NOT NULL,
+      mime_type text NOT NULL,
+      size_bytes integer NOT NULL,
+      created_at integer DEFAULT (unixepoch()) NOT NULL
+    );
+
+    CREATE TABLE session_items (
+      id integer PRIMARY KEY AUTOINCREMENT NOT NULL,
+      session_id integer NOT NULL REFERENCES pricing_sessions(id) ON DELETE cascade,
+      best_frame_id integer REFERENCES best_frames(id) ON DELETE set null,
+      entry_source text NOT NULL,
+      card_name text NOT NULL,
+      set_code text NOT NULL,
+      passcode text NOT NULL,
+      rarity text NOT NULL,
+      edition text NOT NULL,
+      language text NOT NULL,
+      condition text NOT NULL,
+      quantity integer NOT NULL,
+      created_at integer DEFAULT (unixepoch()) NOT NULL,
+      updated_at integer DEFAULT (unixepoch()) NOT NULL
+    );
   `);
 
   const db = drizzle(sqlite, { schema });
@@ -149,6 +174,69 @@ describe("appRouter", () => {
       expect(renamed?.name).toBe("Binder Review");
       expect(sessions).toHaveLength(1);
       expect(sessions[0]?.name).toBe("Binder Review");
+    } finally {
+      close();
+    }
+  });
+
+  it("adds manual items to a pricing session without a best frame", async () => {
+    const { caller, close } = createTestCaller();
+
+    try {
+      const session = await caller.sessions.create();
+      const item = await caller.sessions.addManualItem({
+        id: session.id,
+        cardName: "Dark Magician",
+        setCode: "LOB-005",
+        passcode: "46986414",
+        rarity: "Ultra Rare",
+        edition: "Limited Edition",
+        language: "English",
+        condition: "Near Mint",
+        quantity: 2,
+      });
+      const items = await caller.sessions.items({ id: session.id });
+      const sessions = await caller.sessions.list();
+
+      expect(item).toMatchObject({
+        sessionId: session.id,
+        bestFrameId: null,
+        entrySource: "manual",
+        cardName: "Dark Magician",
+        setCode: "LOB-005",
+        passcode: "46986414",
+        rarity: "Ultra Rare",
+        edition: "Limited Edition",
+        language: "English",
+        condition: "Near Mint",
+        quantity: 2,
+      });
+      expect(items).toHaveLength(1);
+      expect(sessions[0]?.reviewCount).toBe(2);
+    } finally {
+      close();
+    }
+  });
+
+  it("uses manual item defaults for printing identity fields", async () => {
+    const { caller, close } = createTestCaller();
+
+    try {
+      const session = await caller.sessions.create();
+      const item = await caller.sessions.addManualItem({
+        id: session.id,
+        cardName: "Blue-Eyes White Dragon",
+        setCode: "SDK-001",
+        passcode: "89631139",
+        rarity: "Ultra Rare",
+      });
+
+      expect(item).toMatchObject({
+        edition: "1st Edition",
+        language: "English",
+        condition: "Mint",
+        quantity: 1,
+      });
     } finally {
       close();
     }

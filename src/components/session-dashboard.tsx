@@ -9,6 +9,7 @@ import {
   Database,
   Pencil,
   Play,
+  Plus,
   QrCode,
   RefreshCw,
   Search,
@@ -16,20 +17,40 @@ import {
   X,
 } from "lucide-react";
 import type { FormEvent } from "react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { AppRouter } from "@/server/api/root";
+import {
+  CARD_CONDITIONS,
+  CARD_EDITIONS,
+  DEFAULT_CARD_LANGUAGE,
+  searchRarities,
+} from "@/lib/printing-options";
+import { shouldSuggestMetadata } from "@/lib/search-suggestions";
 
 type RouterOutputs = inferRouterOutputs<AppRouter>;
 type Session = RouterOutputs["sessions"]["list"][number];
 type Summary = RouterOutputs["sessions"]["summary"];
 type CardMetadataStatus = RouterOutputs["cards"]["metadataStatus"];
 type CardMetadataResult = RouterOutputs["cards"]["searchMetadata"][number];
+type SessionItem = RouterOutputs["sessions"]["items"][number];
+
+type ManualEntryForm = {
+  cardName: string;
+  setCode: string;
+  passcode: string;
+  rarity: string;
+  edition: (typeof CARD_EDITIONS)[number];
+  language: string;
+  condition: (typeof CARD_CONDITIONS)[number];
+  quantity: number;
+};
 
 const formatter = new Intl.DateTimeFormat("en-GB", {
   dateStyle: "medium",
   timeStyle: "short",
 });
+const MANUAL_SEARCH_DEBOUNCE_MS = 250;
 
 function formatDate(date: string) {
   return formatter.format(new Date(date));
@@ -37,6 +58,19 @@ function formatDate(date: string) {
 
 function captureHref(session: Pick<Session, "joinCode" | "joinUrl">) {
   return session.joinUrl ?? `/capture?join=${encodeURIComponent(session.joinCode)}`;
+}
+
+function emptyManualEntryForm(): ManualEntryForm {
+  return {
+    cardName: "",
+    setCode: "",
+    passcode: "",
+    rarity: "",
+    edition: "1st Edition",
+    language: DEFAULT_CARD_LANGUAGE,
+    condition: "Mint",
+    quantity: 1,
+  };
 }
 
 export function SessionDashboard() {
@@ -55,6 +89,20 @@ export function SessionDashboard() {
     [],
   );
   const [metadataSearching, setMetadataSearching] = useState(false);
+  const [manualSessionId, setManualSessionId] = useState<number | null>(null);
+  const [manualQuery, setManualQuery] = useState("");
+  const [manualResults, setManualResults] = useState<CardMetadataResult[]>([]);
+  const [manualSearching, setManualSearching] = useState(false);
+  const [manualSuggestionsOpen, setManualSuggestionsOpen] = useState(false);
+  const [raritySuggestionsOpen, setRaritySuggestionsOpen] = useState(false);
+  const [manualSaving, setManualSaving] = useState(false);
+  const [manualForm, setManualForm] = useState<ManualEntryForm>(
+    emptyManualEntryForm,
+  );
+  const [sessionItems, setSessionItems] = useState<Record<number, SessionItem[]>>(
+    {},
+  );
+  const manualSearchRequestRef = useRef(0);
 
   const trpc = useMemo(
     () =>
@@ -91,6 +139,36 @@ export function SessionDashboard() {
     void refreshMetadataStatus();
   }, [refreshMetadataStatus]);
 
+  useEffect(() => {
+    const query = manualQuery.trim();
+    const requestId = manualSearchRequestRef.current + 1;
+    manualSearchRequestRef.current = requestId;
+
+    if (!manualSessionId || !shouldSuggestMetadata(query)) {
+      setManualResults([]);
+      setManualSearching(false);
+      return;
+    }
+
+    setManualSearching(true);
+    const timeoutId = window.setTimeout(() => {
+      void trpc.cards.searchMetadata
+        .query({ query })
+        .then((results) => {
+          if (manualSearchRequestRef.current === requestId) {
+            setManualResults(results);
+          }
+        })
+        .finally(() => {
+          if (manualSearchRequestRef.current === requestId) {
+            setManualSearching(false);
+          }
+        });
+    }, MANUAL_SEARCH_DEBOUNCE_MS);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [manualQuery, manualSessionId, trpc]);
+
   async function refreshMetadata() {
     setMetadataRefreshing(true);
     try {
@@ -117,6 +195,58 @@ export function SessionDashboard() {
       await refreshMetadataStatus();
     } finally {
       setMetadataSearching(false);
+    }
+  }
+
+  async function loadSessionItems(sessionId: number) {
+    const items = await trpc.sessions.items.query({ id: sessionId });
+    setSessionItems((current) => ({ ...current, [sessionId]: items }));
+  }
+
+  async function openManualEntry(sessionId: number) {
+    if (manualSessionId === sessionId) {
+      setManualSessionId(null);
+      return;
+    }
+
+    setManualSessionId(sessionId);
+    setManualQuery("");
+    setManualResults([]);
+    setManualSuggestionsOpen(false);
+    setRaritySuggestionsOpen(false);
+    setManualForm(emptyManualEntryForm());
+    await loadSessionItems(sessionId);
+  }
+
+  function selectManualCandidate(result: CardMetadataResult) {
+    setManualForm((current) => ({
+      ...current,
+      cardName: result.name,
+      setCode: result.setCode ?? current.setCode,
+      passcode: result.passcode,
+      rarity: result.rarity ?? current.rarity,
+    }));
+    setManualQuery(result.name);
+    setManualSuggestionsOpen(false);
+  }
+
+  async function addManualItem(event: FormEvent<HTMLFormElement>, id: number) {
+    event.preventDefault();
+    setManualSaving(true);
+    try {
+      await trpc.sessions.addManualItem.mutate({
+        id,
+        ...manualForm,
+        quantity: Number(manualForm.quantity),
+      });
+      setManualForm(emptyManualEntryForm());
+      setManualQuery("");
+      setManualResults([]);
+      setManualSuggestionsOpen(false);
+      setRaritySuggestionsOpen(false);
+      await Promise.all([loadSessionItems(id), refresh()]);
+    } finally {
+      setManualSaving(false);
     }
   }
 
@@ -175,6 +305,9 @@ export function SessionDashboard() {
   }
 
   const continueSession = summary?.continueSession;
+  const manualRarityOptions = manualForm.rarity.trim()
+    ? searchRarities(manualForm.rarity)
+    : [];
 
   return (
     <main className="grid min-h-screen grid-cols-1 bg-[#f6f7f9] text-[#151923] md:grid-cols-[260px_minmax(0,1fr)]">
@@ -542,6 +675,15 @@ export function SessionDashboard() {
                       </div>
                     </div>
                     <div className="flex flex-wrap items-center gap-1.5 md:justify-end">
+                      <button
+                        className="inline-flex min-h-10 items-center justify-center gap-2 rounded-md bg-gray-900 px-3 font-semibold text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-60"
+                        type="button"
+                        disabled={savingId === session.id}
+                        onClick={() => void openManualEntry(session.id)}
+                      >
+                        <Plus className="h-4 w-4" aria-hidden="true" />
+                        Manual
+                      </button>
                       <a
                         className="inline-flex min-h-10 items-center justify-center gap-2 rounded-md bg-teal-700 px-3 font-semibold !text-white hover:bg-teal-800"
                         href={captureHref(session)}
@@ -616,6 +758,321 @@ export function SessionDashboard() {
                       )}
                     </div>
                   </div>
+                  {manualSessionId === session.id ? (
+                    <div className="mt-4 overflow-hidden rounded-md border border-[#cbd5e1] bg-[#f8fafc]">
+                      <div className="flex items-start justify-between gap-3 border-b border-[#e2e8f0] bg-white px-4 py-3">
+                        <div>
+                          <h4 className="text-base font-bold text-[#101828]">
+                            Manual entry
+                          </h4>
+                          <p className="text-sm text-[#667085]">
+                            Search selects metadata. The fields below stay editable.
+                          </p>
+                        </div>
+                        <button
+                          className="inline-flex h-9 w-9 items-center justify-center rounded-md text-[#475467] hover:bg-[#f2f4f7]"
+                          type="button"
+                          onClick={() => setManualSessionId(null)}
+                          aria-label="Close manual entry"
+                          title="Close"
+                        >
+                          <X className="h-4 w-4" aria-hidden="true" />
+                        </button>
+                      </div>
+
+                      <div className="grid gap-4 p-4">
+                        <section
+                          className="relative max-w-2xl"
+                          aria-labelledby={`manual-search-title-${session.id}`}
+                        >
+                          <h5
+                            className="mb-2 text-sm font-bold text-[#344054]"
+                            id={`manual-search-title-${session.id}`}
+                          >
+                            Find card
+                          </h5>
+                          <label
+                            className="sr-only"
+                            htmlFor={`manual-search-${session.id}`}
+                          >
+                            Search card metadata for manual entry
+                          </label>
+                          <div className="relative">
+                            <Search
+                              className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#667085]"
+                              aria-hidden="true"
+                            />
+                            <input
+                              className="min-h-10 w-full rounded-md border border-[#b8c2d2] pl-9 pr-3 text-base outline-none focus:border-[#667085]"
+                              id={`manual-search-${session.id}`}
+                              value={manualQuery}
+                              onChange={(event) => {
+                                setManualQuery(event.target.value);
+                                setManualSuggestionsOpen(true);
+                              }}
+                              onFocus={() => setManualSuggestionsOpen(true)}
+                              placeholder="Type card, Set Code, or Passcode"
+                              autoComplete="off"
+                            />
+                          </div>
+                          <div
+                            className={`absolute left-0 right-0 top-[72px] z-30 rounded-md border border-[#d9dee7] bg-white p-2 shadow-lg ${
+                              manualSuggestionsOpen &&
+                              (manualSearching ||
+                                manualResults.length > 0 ||
+                                manualQuery.trim().length > 0)
+                                ? ""
+                                : "hidden"
+                            }`}
+                          >
+                            {manualQuery.trim().length > 0 &&
+                            !shouldSuggestMetadata(manualQuery) ? (
+                              <p className="px-2 py-1.5 text-sm text-[#667085]">
+                                Keep typing for suggestions.
+                              </p>
+                            ) : manualSearching ? (
+                              <p className="px-2 py-1.5 text-sm text-[#667085]">
+                                Searching...
+                              </p>
+                            ) : manualResults.length > 0 ? (
+                              <ul className="grid max-h-72 gap-1 overflow-auto p-0">
+                                {manualResults.map((result) => (
+                                  <li key={`${result.passcode}-${result.setCode ?? "card"}`}>
+                                    <button
+                                      className="block w-full rounded-md px-3 py-2 text-left hover:bg-teal-50"
+                                      type="button"
+                                      onClick={() => selectManualCandidate(result)}
+                                    >
+                                      <span className="block truncate text-sm font-bold text-[#101828]">
+                                        {result.name}
+                                      </span>
+                                      <span className="mt-1 block text-sm text-[#667085]">
+                                        {result.setCode ?? "No Set Code"} ·{" "}
+                                        {result.rarity ?? "Unknown rarity"}
+                                      </span>
+                                      <span className="mt-1 block text-xs text-[#667085]">
+                                        Passcode {result.passcode}
+                                      </span>
+                                    </button>
+                                  </li>
+                                ))}
+                              </ul>
+                            ) : shouldSuggestMetadata(manualQuery) ? (
+                              <p className="px-2 py-1.5 text-sm text-[#667085]">
+                                No metadata matches yet.
+                              </p>
+                            ) : (
+                              <p className="px-2 py-1.5 text-sm text-[#667085]">
+                                Suggestions appear as you type.
+                              </p>
+                            )}
+                          </div>
+                        </section>
+
+                        <form
+                          className="grid gap-4"
+                          onSubmit={(event) => void addManualItem(event, session.id)}
+                        >
+                          <section
+                            className="rounded-md border border-[#d9dee7] bg-white p-4"
+                            aria-label="Manual card fields"
+                          >
+                            <div className="grid gap-3 md:grid-cols-6">
+                              <label className="grid gap-1 text-sm font-semibold text-[#344054] md:col-span-4">
+                                Card name
+                                <input
+                                  className="min-h-10 rounded-md border border-[#b8c2d2] px-3 text-base font-normal text-[#101828] outline-none focus:border-[#667085]"
+                                  required
+                                  value={manualForm.cardName}
+                                  onChange={(event) =>
+                                    setManualForm((current) => ({
+                                      ...current,
+                                      cardName: event.target.value,
+                                    }))
+                                  }
+                                />
+                              </label>
+                              <label className="grid gap-1 text-sm font-semibold text-[#344054] md:col-span-2">
+                                Quantity
+                                <input
+                                  className="min-h-10 rounded-md border border-[#b8c2d2] px-3 text-base font-normal text-[#101828] outline-none focus:border-[#667085]"
+                                  min={1}
+                                  max={999}
+                                  required
+                                  type="number"
+                                  value={manualForm.quantity}
+                                  onChange={(event) =>
+                                    setManualForm((current) => ({
+                                      ...current,
+                                      quantity: Number(event.target.value),
+                                    }))
+                                  }
+                                />
+                              </label>
+                              <label className="grid gap-1 text-sm font-semibold text-[#344054] md:col-span-2">
+                                Set Code
+                                <input
+                                  className="min-h-10 rounded-md border border-[#b8c2d2] px-3 text-base font-normal text-[#101828] outline-none focus:border-[#667085]"
+                                  required
+                                  value={manualForm.setCode}
+                                  onChange={(event) =>
+                                    setManualForm((current) => ({
+                                      ...current,
+                                      setCode: event.target.value,
+                                    }))
+                                  }
+                                />
+                              </label>
+                              <label className="grid gap-1 text-sm font-semibold text-[#344054] md:col-span-2">
+                                Passcode
+                                <input
+                                  className="min-h-10 rounded-md border border-[#b8c2d2] px-3 text-base font-normal text-[#101828] outline-none focus:border-[#667085]"
+                                  required
+                                  value={manualForm.passcode}
+                                  onChange={(event) =>
+                                    setManualForm((current) => ({
+                                      ...current,
+                                      passcode: event.target.value,
+                                    }))
+                                  }
+                                />
+                              </label>
+                              <div className="relative grid gap-1 text-sm font-semibold text-[#344054] md:col-span-2">
+                                <label htmlFor={`manual-rarity-${session.id}`}>
+                                  Rarity
+                                </label>
+                                <input
+                                  className="min-h-10 rounded-md border border-[#b8c2d2] px-3 text-base font-normal text-[#101828] outline-none focus:border-[#667085]"
+                                  id={`manual-rarity-${session.id}`}
+                                  required
+                                  value={manualForm.rarity}
+                                  autoComplete="off"
+                                  onFocus={() => setRaritySuggestionsOpen(true)}
+                                  onChange={(event) =>
+                                    {
+                                      setManualForm((current) => ({
+                                        ...current,
+                                        rarity: event.target.value,
+                                      }));
+                                      setRaritySuggestionsOpen(true);
+                                    }
+                                  }
+                                />
+                                {raritySuggestionsOpen &&
+                                manualRarityOptions.length > 0 ? (
+                                  <div className="absolute left-0 right-0 top-full z-30 mt-1 rounded-md border border-[#d9dee7] bg-white p-1 shadow-lg">
+                                    {manualRarityOptions.map((option) => (
+                                      <button
+                                        className="block w-full rounded px-2 py-1.5 text-left text-sm font-medium text-[#344054] hover:bg-teal-50"
+                                        key={option.value}
+                                        type="button"
+                                        onClick={() => {
+                                          setManualForm((current) => ({
+                                            ...current,
+                                            rarity: option.value,
+                                          }));
+                                          setRaritySuggestionsOpen(false);
+                                        }}
+                                      >
+                                        {option.label}
+                                      </button>
+                                    ))}
+                                  </div>
+                                ) : null}
+                              </div>
+                              <label className="grid gap-1 text-sm font-semibold text-[#344054] md:col-span-2">
+                                Edition
+                                <select
+                                  className="min-h-10 rounded-md border border-[#b8c2d2] px-3 text-base font-normal text-[#101828] outline-none focus:border-[#667085]"
+                                  value={manualForm.edition}
+                                  onChange={(event) =>
+                                    setManualForm((current) => ({
+                                      ...current,
+                                      edition: event.target
+                                        .value as ManualEntryForm["edition"],
+                                    }))
+                                  }
+                                >
+                                  {CARD_EDITIONS.map((edition) => (
+                                    <option key={edition}>{edition}</option>
+                                  ))}
+                                </select>
+                              </label>
+                              <label className="grid gap-1 text-sm font-semibold text-[#344054] md:col-span-2">
+                                Language
+                                <input
+                                  className="min-h-10 rounded-md border border-[#b8c2d2] px-3 text-base font-normal text-[#101828] outline-none focus:border-[#667085]"
+                                  required
+                                  value={manualForm.language}
+                                  onChange={(event) =>
+                                    setManualForm((current) => ({
+                                      ...current,
+                                      language: event.target.value,
+                                    }))
+                                  }
+                                />
+                              </label>
+                              <label className="grid gap-1 text-sm font-semibold text-[#344054] md:col-span-2">
+                                Condition
+                                <select
+                                  className="min-h-10 rounded-md border border-[#b8c2d2] px-3 text-base font-normal text-[#101828] outline-none focus:border-[#667085]"
+                                  value={manualForm.condition}
+                                  onChange={(event) =>
+                                    setManualForm((current) => ({
+                                      ...current,
+                                      condition: event.target
+                                        .value as ManualEntryForm["condition"],
+                                    }))
+                                  }
+                                >
+                                  {CARD_CONDITIONS.map((condition) => (
+                                    <option key={condition}>{condition}</option>
+                                  ))}
+                                </select>
+                              </label>
+                            </div>
+                          </section>
+                          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                            <button
+                              className="inline-flex min-h-10 w-fit items-center justify-center gap-2 rounded-md bg-teal-700 px-4 font-semibold text-white hover:bg-teal-800 disabled:cursor-not-allowed disabled:opacity-60"
+                              type="submit"
+                              disabled={manualSaving}
+                            >
+                              <Plus className="h-4 w-4" aria-hidden="true" />
+                              Add card
+                            </button>
+                            <p className="text-sm text-[#667085]">
+                              Added here without Best Frame evidence.
+                            </p>
+                          </div>
+                        </form>
+                      </div>
+
+                      {(sessionItems[session.id] ?? []).length > 0 ? (
+                        <div className="border-t border-[#e2e8f0] bg-white px-4 py-3">
+                          <h5 className="mb-2 text-sm font-bold text-[#344054]">
+                            Manual cards
+                          </h5>
+                          <ul className="grid gap-2 p-0">
+                            {(sessionItems[session.id] ?? []).map((item) => (
+                              <li
+                                className="grid gap-1 rounded-md border border-[#e4e7ec] px-3 py-2 text-sm md:grid-cols-[minmax(0,1fr)_auto]"
+                                key={item.id}
+                              >
+                                <span className="min-w-0 truncate font-semibold">
+                                  {item.quantity}x {item.cardName}
+                                </span>
+                                <span className="text-[#667085]">
+                                  {item.setCode} · {item.rarity} · {item.edition} ·{" "}
+                                  {item.condition} · {item.language}
+                                </span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
                 </li>
               ))}
             </ul>

@@ -66,3 +66,28 @@ export const cardMetadataPrintings = sqliteTable("card_metadata_printings", {
     .default(sql`(unixepoch())`)
     .notNull(),
 });
+
+export const sessionItems = sqliteTable("session_items", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  sessionId: integer("session_id")
+    .notNull()
+    .references(() => pricingSessions.id, { onDelete: "cascade" }),
+  bestFrameId: integer("best_frame_id").references(() => bestFrames.id, {
+    onDelete: "set null",
+  }),
+  entrySource: text("entry_source").notNull(),
+  cardName: text("card_name").notNull(),
+  setCode: text("set_code").notNull(),
+  passcode: text("passcode").notNull(),
+  rarity: text("rarity").notNull(),
+  edition: text("edition").notNull(),
+  language: text("language").notNull(),
+  condition: text("condition").notNull(),
+  quantity: integer("quantity").notNull(),
+  createdAt: integer("created_at", { mode: "timestamp" })
+    .default(sql`(unixepoch())`)
+    .notNull(),
+  updatedAt: integer("updated_at", { mode: "timestamp" })
+    .default(sql`(unixepoch())`)
+    .notNull(),
+});

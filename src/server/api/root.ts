@@ -5,7 +5,12 @@ import {
   refreshCardMetadataCache,
   searchCardMetadata,
 } from "@/server/cards/metadata-cache";
-import { pricingSessions } from "@/server/db/schema";
+import {
+  CARD_CONDITIONS,
+  CARD_EDITIONS,
+  DEFAULT_CARD_LANGUAGE,
+} from "@/lib/printing-options";
+import { pricingSessions, sessionItems } from "@/server/db/schema";
 import { desc, eq, isNull } from "drizzle-orm";
 import QRCode from "qrcode";
 import { randomBytes } from "node:crypto";
@@ -31,6 +36,21 @@ const joinSessionInputSchema = z.object({
 
 const cardSearchInputSchema = z.object({
   query: z.string().trim().min(1).max(120),
+});
+
+const cardEditionSchema = z.enum(CARD_EDITIONS);
+
+const cardConditionSchema = z.enum(CARD_CONDITIONS);
+
+const manualSessionItemInputSchema = sessionIdInputSchema.extend({
+  cardName: z.string().trim().min(1).max(160),
+  setCode: z.string().trim().min(1).max(40),
+  passcode: z.string().trim().min(1).max(40),
+  rarity: z.string().trim().min(1).max(80),
+  edition: cardEditionSchema.default("1st Edition"),
+  language: z.string().trim().min(1).max(40).default(DEFAULT_CARD_LANGUAGE),
+  condition: cardConditionSchema.default("Mint"),
+  quantity: z.number().int().min(1).max(999).default(1),
 });
 
 function automaticSessionName(now = new Date()) {
@@ -109,6 +129,14 @@ function serializeSession(session: typeof pricingSessions.$inferSelect) {
     archivedAt: session.archivedAt?.toISOString() ?? null,
     createdAt: session.createdAt.toISOString(),
     updatedAt: session.updatedAt.toISOString(),
+  };
+}
+
+function serializeSessionItem(item: typeof sessionItems.$inferSelect) {
+  return {
+    ...item,
+    createdAt: item.createdAt.toISOString(),
+    updatedAt: item.updatedAt.toISOString(),
   };
 }
 
@@ -234,6 +262,59 @@ export const appRouter = router({
           .returning({ id: pricingSessions.id });
 
         return { deleted: deletedSessions.length > 0 };
+      }),
+    items: publicProcedure
+      .input(sessionIdInputSchema)
+      .query(async ({ ctx, input }) => {
+        const items = await ctx.db
+          .select()
+          .from(sessionItems)
+          .where(eq(sessionItems.sessionId, input.id))
+          .orderBy(desc(sessionItems.createdAt));
+
+        return items.map(serializeSessionItem);
+      }),
+    addManualItem: publicProcedure
+      .input(manualSessionItemInputSchema)
+      .mutation(async ({ ctx, input }) => {
+        const [session] = await ctx.db
+          .select()
+          .from(pricingSessions)
+          .where(eq(pricingSessions.id, input.id));
+
+        if (!session) {
+          return null;
+        }
+
+        const now = new Date();
+        const [item] = await ctx.db
+          .insert(sessionItems)
+          .values({
+            sessionId: input.id,
+            bestFrameId: null,
+            entrySource: "manual",
+            cardName: input.cardName,
+            setCode: input.setCode,
+            passcode: input.passcode,
+            rarity: input.rarity,
+            edition: input.edition,
+            language: input.language,
+            condition: input.condition,
+            quantity: input.quantity,
+            createdAt: now,
+            updatedAt: now,
+          })
+          .returning();
+
+        await ctx.db
+          .update(pricingSessions)
+          .set({
+            reviewCount: session.reviewCount + input.quantity,
+            updatedAt: now,
+          })
+          .where(eq(pricingSessions.id, input.id));
+
+        return serializeSessionItem(item);
       }),
   }),
   capture: router({
