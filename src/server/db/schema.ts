@@ -91,3 +91,18 @@ export const sessionItems = sqliteTable("session_items", {
     .default(sql`(unixepoch())`)
     .notNull(),
 });
+
+export const priceSnapshots = sqliteTable("price_snapshots", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  sessionItemId: integer("session_item_id")
+    .notNull()
+    .references(() => sessionItems.id, { onDelete: "cascade" }),
+  status: text("status").notNull(),
+  observedAmount: text("observed_amount"),
+  source: text("source").notNull(),
+  currency: text("currency"),
+  observedAt: integer("observed_at", { mode: "timestamp" }).notNull(),
+  createdAt: integer("created_at", { mode: "timestamp" })
+    .default(sql`(unixepoch())`)
+    .notNull(),
+});
