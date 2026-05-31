@@ -1,7 +1,9 @@
 import { initTRPC } from "@trpc/server";
 
+import { db } from "@/server/db";
+
 export function createTRPCContext() {
-  return {};
+  return { db };
 }
 
 type TRPCContext = Awaited<ReturnType<typeof createTRPCContext>>;

@@ -15,6 +15,13 @@
       "when": 1780187949710,
       "tag": "0001_best_frames",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1780189214164,
+      "tag": "0002_black_tomas",
+      "breakpoints": true
     }
   ]
 }
