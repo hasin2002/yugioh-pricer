@@ -27,6 +27,7 @@ export function SessionDashboard() {
   const [loading, setLoading] = useState(true);
   const [savingId, setSavingId] = useState<number | null>(null);
   const [deletePendingId, setDeletePendingId] = useState<number | null>(null);
+  const [editingId, setEditingId] = useState<number | null>(null);
 
   const trpc = useMemo(
     () =>
@@ -86,6 +87,7 @@ export function SessionDashboard() {
 
     if (typeof name === "string") {
       await renameSession(id, name);
+      setEditingId(null);
     }
   }
 
@@ -260,7 +262,7 @@ export function SessionDashboard() {
         </section>
 
         <section
-          className="rounded-lg border border-[#d9dee7] bg-white p-5"
+          className="rounded-lg bg-white p-5 shadow-sm ring-1 ring-[#e4e7ec]"
           aria-labelledby="recent-sessions-title"
         >
           <div className="mb-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -279,59 +281,84 @@ export function SessionDashboard() {
           </div>
 
           {loading ? (
-            <div className="rounded-lg border border-dashed border-[#d9dee7] p-[22px] text-[#667085]">
+            <div className="border-t border-[#eaecf0] py-8 text-[#667085]">
               Loading sessions...
             </div>
           ) : sessions.length === 0 ? (
-            <div className="rounded-lg border border-dashed border-[#d9dee7] p-[22px] text-[#667085]">
+            <div className="border-t border-[#eaecf0] py-8 text-[#667085]">
               No pricing sessions yet.
             </div>
           ) : (
-            <ul className="grid list-none gap-3 p-0">
+            <ul className="divide-y divide-[#eaecf0] border-t border-[#eaecf0] p-0">
               {sessions.map((session) => (
-                <li
-                  className="rounded-lg border border-[#d9dee7] bg-white p-4"
-                  key={session.id}
-                >
-                  <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-                    <div className="min-w-0 flex-1">
-                      <form
-                        className="mb-2 flex max-w-xl gap-2"
-                        onSubmit={(event) => void submitRename(event, session.id)}
-                      >
-                        <input
-                          className="min-h-10 min-w-0 flex-1 rounded-md border border-[#d9dee7] px-2 text-lg font-bold outline-none focus:border-[#98a2b3]"
-                          defaultValue={session.name}
-                          name="name"
-                          aria-label={`Session name for ${session.name}`}
-                        />
-                        <button
-                          className="min-h-10 rounded-md border border-[#b8c2d2] px-3 text-sm font-semibold text-[#344054] hover:bg-[#f2f4f7] disabled:cursor-not-allowed disabled:opacity-60"
-                          type="submit"
-                          disabled={savingId === session.id}
+                <li className="py-4" key={session.id}>
+                  <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
+                    <div className="min-w-0">
+                      {editingId === session.id ? (
+                        <form
+                          className="mb-2 flex max-w-xl gap-2"
+                          onSubmit={(event) =>
+                            void submitRename(event, session.id)
+                          }
                         >
-                          Save
-                        </button>
-                      </form>
+                          <input
+                            className="min-h-10 min-w-0 flex-1 rounded-md border border-[#b8c2d2] px-2 text-base font-semibold outline-none focus:border-[#667085]"
+                            defaultValue={session.name}
+                            name="name"
+                            aria-label={`Session name for ${session.name}`}
+                            autoFocus
+                          />
+                          <button
+                            className="min-h-10 rounded-md bg-gray-900 px-3 text-sm font-semibold text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-60"
+                            type="submit"
+                            disabled={savingId === session.id}
+                          >
+                            Save
+                          </button>
+                          <button
+                            className="min-h-10 rounded-md px-3 text-sm font-semibold text-[#475467] hover:bg-[#f2f4f7]"
+                            type="button"
+                            onClick={() => setEditingId(null)}
+                          >
+                            Cancel
+                          </button>
+                        </form>
+                      ) : (
+                        <div className="mb-2 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1">
+                          <h3 className="truncate text-lg font-bold leading-tight">
+                            {session.name}
+                          </h3>
+                          {session.archivedAt ? (
+                            <span className="rounded-full bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-700">
+                              Archived
+                            </span>
+                          ) : null}
+                        </div>
+                      )}
                       <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-[#667085]">
                         <span>{session.reviewCount} reviews</span>
                         <span>Updated {formatDate(session.updatedAt)}</span>
-                        {session.archivedAt ? (
-                          <span className="font-semibold text-amber-700">
-                            Archived
-                          </span>
-                        ) : null}
                       </div>
                     </div>
-                    <div className="flex flex-wrap gap-2">
+                    <div className="flex flex-wrap gap-2 md:justify-end">
                       <a
-                        className="inline-flex min-h-10 items-center justify-center rounded-md border border-[#b8c2d2] px-3 font-semibold text-[#344054] hover:bg-[#f2f4f7]"
+                        className="inline-flex min-h-10 items-center justify-center rounded-md bg-gray-900 px-3 font-semibold text-white hover:bg-gray-800"
                         href={`/capture?sessionId=${session.id}`}
                       >
                         Resume
                       </a>
+                      {editingId === session.id ? null : (
+                        <button
+                          className="min-h-10 rounded-md px-3 font-semibold text-[#344054] hover:bg-[#f2f4f7] disabled:cursor-not-allowed disabled:opacity-60"
+                          type="button"
+                          disabled={savingId === session.id}
+                          onClick={() => setEditingId(session.id)}
+                        >
+                          Rename
+                        </button>
+                      )}
                       <button
-                        className="min-h-10 rounded-md border border-[#b8c2d2] px-3 font-semibold text-[#344054] hover:bg-[#f2f4f7] disabled:cursor-not-allowed disabled:opacity-60"
+                        className="min-h-10 rounded-md px-3 font-semibold text-[#344054] hover:bg-[#f2f4f7] disabled:cursor-not-allowed disabled:opacity-60"
                         type="button"
                         disabled={savingId === session.id}
                         onClick={() =>
@@ -360,7 +387,7 @@ export function SessionDashboard() {
                         </>
                       ) : (
                         <button
-                          className="min-h-10 rounded-md border border-red-200 px-3 font-semibold text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
+                          className="min-h-10 rounded-md px-3 font-semibold text-red-700 hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-60"
                           type="button"
                           disabled={savingId === session.id}
                           onClick={() => setDeletePendingId(session.id)}
