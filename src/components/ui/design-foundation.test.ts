@@ -26,4 +26,15 @@ describe("shadcn design foundation", () => {
     expect(globals).toContain("--primary: oklch(0.279 0.041 260.031)");
     expect(globals).toContain("--ring: oklch(0.45 0.09 194)");
   });
+
+  it("keeps primary link-buttons readable against the primary background", () => {
+    const dashboard = readFileSync(
+      "src/components/session-dashboard.tsx",
+      "utf8",
+    );
+
+    expect(dashboard).toContain(
+      "h-10 !text-primary-foreground hover:!text-primary-foreground",
+    );
+  });
 });

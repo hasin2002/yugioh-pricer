@@ -734,7 +734,11 @@ export function SessionDashboard() {
             </div>
             <CardAction>
             {continueSession ? (
-              <Button asChild className="h-10" size="lg">
+              <Button
+                asChild
+                className="h-10 !text-primary-foreground hover:!text-primary-foreground"
+                size="lg"
+              >
                 <a href={captureHref(continueSession)}>Continue</a>
               </Button>
             ) : (
