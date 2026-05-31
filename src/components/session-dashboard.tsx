@@ -6,6 +6,7 @@ import {
   Archive,
   ArchiveRestore,
   Check,
+  FolderOpen,
   Pencil,
   Play,
   Plus,
@@ -96,6 +97,10 @@ function captureHref(session: Pick<Session, "joinCode" | "joinUrl">) {
   return session.joinUrl ?? `/capture?join=${encodeURIComponent(session.joinCode)}`;
 }
 
+function workspaceHref(session: Pick<Session, "id">) {
+  return `/sessions/${session.id}`;
+}
+
 function emptyManualEntryForm(): ManualEntryForm {
   return {
     cardName: "",
@@ -168,43 +173,6 @@ export function SessionDashboard() {
   useEffect(() => {
     void refresh();
   }, [refresh]);
-
-  useEffect(() => {
-    const unloadedSessions = sessions.filter(
-      (session) => sessionItems[session.id] === undefined,
-    );
-
-    if (unloadedSessions.length === 0) {
-      return;
-    }
-
-    let cancelled = false;
-
-    void Promise.all(
-      unloadedSessions.map(async (session) => ({
-        id: session.id,
-        items: await trpc.sessions.items.query({ id: session.id }),
-      })),
-    ).then((loadedSessions) => {
-      if (cancelled) {
-        return;
-      }
-
-      setSessionItems((current) => {
-        const next = { ...current };
-
-        for (const loadedSession of loadedSessions) {
-          next[loadedSession.id] = loadedSession.items;
-        }
-
-        return next;
-      });
-    });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [sessions, sessionItems, trpc]);
 
   useEffect(() => {
     const query = manualQuery.trim();
@@ -596,7 +564,7 @@ export function SessionDashboard() {
                 className="h-10 !text-primary-foreground hover:!text-primary-foreground"
                 size="lg"
               >
-                <a href={captureHref(continueSession)}>Continue</a>
+                <a href={workspaceHref(continueSession)}>Continue</a>
               </Button>
             ) : (
               <Button
@@ -738,14 +706,11 @@ export function SessionDashboard() {
                       </div>
                     </div>
                     <div className="flex flex-wrap items-center gap-1.5 md:justify-end">
-                      <Button
-                        className="h-10"
-                        type="button"
-                        disabled={savingId === session.id}
-                        onClick={() => void openManualEntry(session.id)}
-                      >
-                        <Plus className="h-4 w-4" aria-hidden="true" />
-                        Manual
+                      <Button asChild className="h-10">
+                        <a href={workspaceHref(session)}>
+                          <FolderOpen className="h-4 w-4" aria-hidden="true" />
+                          Workspace
+                        </a>
                       </Button>
                       <Button asChild className="h-10" variant="secondary">
                         <a href={captureHref(session)}>
