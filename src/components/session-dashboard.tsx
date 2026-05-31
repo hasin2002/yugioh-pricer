@@ -93,6 +93,8 @@ export function SessionDashboard() {
   const [manualQuery, setManualQuery] = useState("");
   const [manualResults, setManualResults] = useState<CardMetadataResult[]>([]);
   const [manualSearching, setManualSearching] = useState(false);
+  const [manualSuggestionsOpen, setManualSuggestionsOpen] = useState(false);
+  const [raritySuggestionsOpen, setRaritySuggestionsOpen] = useState(false);
   const [manualSaving, setManualSaving] = useState(false);
   const [manualForm, setManualForm] = useState<ManualEntryForm>(
     emptyManualEntryForm,
@@ -210,6 +212,8 @@ export function SessionDashboard() {
     setManualSessionId(sessionId);
     setManualQuery("");
     setManualResults([]);
+    setManualSuggestionsOpen(false);
+    setRaritySuggestionsOpen(false);
     setManualForm(emptyManualEntryForm());
     await loadSessionItems(sessionId);
   }
@@ -222,6 +226,8 @@ export function SessionDashboard() {
       passcode: result.passcode,
       rarity: result.rarity ?? current.rarity,
     }));
+    setManualQuery(result.name);
+    setManualSuggestionsOpen(false);
   }
 
   async function addManualItem(event: FormEvent<HTMLFormElement>, id: number) {
@@ -236,6 +242,8 @@ export function SessionDashboard() {
       setManualForm(emptyManualEntryForm());
       setManualQuery("");
       setManualResults([]);
+      setManualSuggestionsOpen(false);
+      setRaritySuggestionsOpen(false);
       await Promise.all([loadSessionItems(id), refresh()]);
     } finally {
       setManualSaving(false);
@@ -772,9 +780,9 @@ export function SessionDashboard() {
                         </button>
                       </div>
 
-                      <div className="grid gap-4 p-4 lg:grid-cols-[minmax(280px,360px)_minmax(0,1fr)]">
+                      <div className="grid gap-4 p-4">
                         <section
-                          className="rounded-md border border-[#d9dee7] bg-white p-3"
+                          className="relative max-w-2xl"
                           aria-labelledby={`manual-search-title-${session.id}`}
                         >
                           <h5
@@ -798,27 +806,40 @@ export function SessionDashboard() {
                               className="min-h-10 w-full rounded-md border border-[#b8c2d2] pl-9 pr-3 text-base outline-none focus:border-[#667085]"
                               id={`manual-search-${session.id}`}
                               value={manualQuery}
-                              onChange={(event) => setManualQuery(event.target.value)}
+                              onChange={(event) => {
+                                setManualQuery(event.target.value);
+                                setManualSuggestionsOpen(true);
+                              }}
+                              onFocus={() => setManualSuggestionsOpen(true)}
                               placeholder="Type card, Set Code, or Passcode"
                               autoComplete="off"
                             />
                           </div>
-                          <div className="mt-3 min-h-44">
+                          <div
+                            className={`absolute left-0 right-0 top-[72px] z-30 rounded-md border border-[#d9dee7] bg-white p-2 shadow-lg ${
+                              manualSuggestionsOpen &&
+                              (manualSearching ||
+                                manualResults.length > 0 ||
+                                manualQuery.trim().length > 0)
+                                ? ""
+                                : "hidden"
+                            }`}
+                          >
                             {manualQuery.trim().length > 0 &&
                             !shouldSuggestMetadata(manualQuery) ? (
-                              <p className="text-sm text-[#667085]">
+                              <p className="px-2 py-1.5 text-sm text-[#667085]">
                                 Keep typing for suggestions.
                               </p>
                             ) : manualSearching ? (
-                              <p className="text-sm text-[#667085]">
+                              <p className="px-2 py-1.5 text-sm text-[#667085]">
                                 Searching...
                               </p>
                             ) : manualResults.length > 0 ? (
-                              <ul className="grid max-h-72 gap-2 overflow-auto p-0">
+                              <ul className="grid max-h-72 gap-1 overflow-auto p-0">
                                 {manualResults.map((result) => (
                                   <li key={`${result.passcode}-${result.setCode ?? "card"}`}>
                                     <button
-                                      className="block w-full rounded-md border border-[#e4e7ec] bg-white p-3 text-left hover:border-teal-700 hover:bg-teal-50"
+                                      className="block w-full rounded-md px-3 py-2 text-left hover:bg-teal-50"
                                       type="button"
                                       onClick={() => selectManualCandidate(result)}
                                     >
@@ -837,11 +858,11 @@ export function SessionDashboard() {
                                 ))}
                               </ul>
                             ) : shouldSuggestMetadata(manualQuery) ? (
-                              <p className="text-sm text-[#667085]">
+                              <p className="px-2 py-1.5 text-sm text-[#667085]">
                                 No metadata matches yet.
                               </p>
                             ) : (
-                              <p className="text-sm text-[#667085]">
+                              <p className="px-2 py-1.5 text-sm text-[#667085]">
                                 Suggestions appear as you type.
                               </p>
                             )}
@@ -853,7 +874,7 @@ export function SessionDashboard() {
                           onSubmit={(event) => void addManualItem(event, session.id)}
                         >
                           <section
-                            className="rounded-md border border-[#d9dee7] bg-white p-3"
+                            className="rounded-md border border-[#d9dee7] bg-white p-4"
                             aria-label="Manual card fields"
                           >
                             <div className="grid gap-3 md:grid-cols-6">
@@ -916,39 +937,49 @@ export function SessionDashboard() {
                                   }
                                 />
                               </label>
-                              <label className="relative grid gap-1 text-sm font-semibold text-[#344054] md:col-span-2">
-                                Rarity
+                              <div className="relative grid gap-1 text-sm font-semibold text-[#344054] md:col-span-2">
+                                <label htmlFor={`manual-rarity-${session.id}`}>
+                                  Rarity
+                                </label>
                                 <input
                                   className="min-h-10 rounded-md border border-[#b8c2d2] px-3 text-base font-normal text-[#101828] outline-none focus:border-[#667085]"
+                                  id={`manual-rarity-${session.id}`}
                                   required
                                   value={manualForm.rarity}
+                                  autoComplete="off"
+                                  onFocus={() => setRaritySuggestionsOpen(true)}
                                   onChange={(event) =>
-                                    setManualForm((current) => ({
-                                      ...current,
-                                      rarity: event.target.value,
-                                    }))
+                                    {
+                                      setManualForm((current) => ({
+                                        ...current,
+                                        rarity: event.target.value,
+                                      }));
+                                      setRaritySuggestionsOpen(true);
+                                    }
                                   }
                                 />
-                                {manualRarityOptions.length > 0 ? (
-                                  <div className="rounded-md border border-[#d9dee7] bg-[#f8fafc] p-1">
+                                {raritySuggestionsOpen &&
+                                manualRarityOptions.length > 0 ? (
+                                  <div className="absolute left-0 right-0 top-full z-30 mt-1 rounded-md border border-[#d9dee7] bg-white p-1 shadow-lg">
                                     {manualRarityOptions.map((option) => (
                                       <button
-                                        className="block w-full rounded px-2 py-1.5 text-left text-sm font-medium text-[#344054] hover:bg-white"
+                                        className="block w-full rounded px-2 py-1.5 text-left text-sm font-medium text-[#344054] hover:bg-teal-50"
                                         key={option.value}
                                         type="button"
-                                        onClick={() =>
+                                        onClick={() => {
                                           setManualForm((current) => ({
                                             ...current,
                                             rarity: option.value,
-                                          }))
-                                        }
+                                          }));
+                                          setRaritySuggestionsOpen(false);
+                                        }}
                                       >
                                         {option.label}
                                       </button>
                                     ))}
                                   </div>
                                 ) : null}
-                              </label>
+                              </div>
                               <label className="grid gap-1 text-sm font-semibold text-[#344054] md:col-span-2">
                                 Edition
                                 <select
