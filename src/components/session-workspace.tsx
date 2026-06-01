@@ -45,6 +45,7 @@ type EditorForm = {
   cardName: string;
   setCode: string;
   serialNumber: string;
+  cardImageUrl: string | null;
   rarity: string;
   edition: (typeof CARD_EDITIONS)[number];
   language: string;
@@ -65,6 +66,7 @@ function emptyEditorForm(): EditorForm {
     cardName: "",
     setCode: "",
     serialNumber: "",
+    cardImageUrl: null,
     rarity: "",
     edition: "1st Edition",
     language: DEFAULT_CARD_LANGUAGE,
@@ -80,6 +82,7 @@ function formForItem(item: SessionItem): EditorForm {
     cardName: item.cardName,
     setCode: item.setCode,
     serialNumber: item.serialNumber,
+    cardImageUrl: item.cardImageUrl,
     rarity: item.rarity,
     edition: item.edition as EditorForm["edition"],
     language: item.language,
@@ -116,6 +119,24 @@ function itemLabel(item: SessionItem) {
   return item.cardName.trim() || `Session Item ${item.id}`;
 }
 
+function croppedCardArtUrl(serialNumber: string, imageUrl: string | null) {
+  const trimmedSerialNumber = serialNumber.trim();
+
+  if (trimmedSerialNumber) {
+    return `https://images.ygoprodeck.com/images/cards_cropped/${encodeURIComponent(
+      trimmedSerialNumber,
+    )}.jpg`;
+  }
+
+  if (!imageUrl) {
+    return null;
+  }
+
+  return imageUrl
+    .replace("/images/cards_small/", "/images/cards_cropped/")
+    .replace("/images/cards/", "/images/cards_cropped/");
+}
+
 export function SessionWorkspace({ sessionId }: { sessionId: number }) {
   const [session, setSession] = useState<Session | null>(null);
   const [items, setItems] = useState<SessionItem[]>([]);
@@ -131,6 +152,7 @@ export function SessionWorkspace({ sessionId }: { sessionId: number }) {
   const [searching, setSearching] = useState(false);
   const [suggestionsOpen, setSuggestionsOpen] = useState(false);
   const [raritySuggestionsOpen, setRaritySuggestionsOpen] = useState(false);
+  const [failedArtUrl, setFailedArtUrl] = useState<string | null>(null);
   const searchRequestRef = useRef(0);
 
   const trpc = useMemo(
@@ -278,6 +300,7 @@ export function SessionWorkspace({ sessionId }: { sessionId: number }) {
       cardName: result.name,
       setCode: result.setCode ?? current.setCode,
       serialNumber: result.passcode,
+      cardImageUrl: result.imageUrl,
       rarity: result.rarity ?? current.rarity,
       rarityConfirmed: false,
     }));
@@ -367,11 +390,13 @@ export function SessionWorkspace({ sessionId }: { sessionId: number }) {
   }
 
   const pricedAmount = selectedItem ? formatSnapshotAmount(selectedItem) : null;
+  const candidateArtUrl = croppedCardArtUrl(form.serialNumber, form.cardImageUrl);
+  const artUrl = candidateArtUrl === failedArtUrl ? null : candidateArtUrl;
 
   return (
-    <main className="min-h-screen bg-muted/40 text-foreground">
-      <div className="grid min-h-screen grid-cols-1 lg:grid-cols-[280px_minmax(0,1fr)]">
-        <aside className="border-r bg-background p-4 lg:p-5">
+    <main className="min-h-screen bg-slate-50 text-foreground">
+      <div className="grid min-h-screen grid-cols-1 lg:grid-cols-[300px_minmax(0,1fr)]">
+        <aside className="min-w-0 overflow-hidden border-r bg-white p-4 lg:p-5">
           <div className="mb-5 flex items-center justify-between gap-3">
             <Button asChild variant="ghost" size="sm">
               <a href="/">
@@ -389,7 +414,7 @@ export function SessionWorkspace({ sessionId }: { sessionId: number }) {
             </Button>
           </div>
 
-          <section aria-labelledby="navigator-title">
+          <section className="min-w-0" aria-labelledby="navigator-title">
             <h2 className="text-sm font-bold" id="navigator-title">
               Session Item Navigator
             </h2>
@@ -465,13 +490,13 @@ export function SessionWorkspace({ sessionId }: { sessionId: number }) {
             </Card>
           </header>
 
-          <div className="grid gap-6 xl:grid-cols-[minmax(340px,460px)_minmax(0,1fr)] xl:items-start">
+          <div className="grid gap-8 xl:grid-cols-[minmax(360px,470px)_minmax(0,1fr)] xl:items-start">
             <section aria-label="Card-shaped Session Item Editor">
-              <div className="mx-auto aspect-[59/86] w-full max-w-[430px] rounded-[18px] border border-slate-500 bg-gradient-to-br from-stone-200 via-slate-100 to-stone-300 p-[4.5%] shadow-xl">
-                <div className="grid h-full grid-rows-[9%_4%_42%_5%_24%_6%] gap-[1.2%] rounded-[10px] border border-slate-400 bg-stone-100 p-[3%] shadow-inner">
-                  <div className="flex items-center justify-between gap-2 border-b-2 border-slate-400 px-2">
+              <div className="mx-auto aspect-[59/86] w-full max-w-[450px] rounded-[18px] border border-slate-700 bg-[linear-gradient(135deg,#dfe3e8_0%,#f8fafc_42%,#c8ced8_100%)] p-[4.6%] shadow-[0_22px_55px_rgba(15,23,42,0.18)]">
+                <div className="grid h-full grid-rows-[10%_45%_4.6%_22%_5%] gap-[2%] rounded-[9px] border border-slate-400 bg-[linear-gradient(135deg,#f7f8fa_0%,#e7ebf1_52%,#fdfdfd_100%)] p-[4%] shadow-inner">
+                  <div className="flex min-w-0 items-end border-b-2 border-slate-400 px-2 pb-1">
                     <Input
-                      className="h-9 min-w-0 border-0 bg-transparent px-0 text-xl font-bold uppercase shadow-none focus-visible:ring-0"
+                      className="h-9 min-w-0 border-0 bg-transparent px-0 text-[clamp(16px,4vw,24px)] font-semibold uppercase tracking-normal shadow-none focus-visible:ring-0"
                       aria-label="Card name"
                       value={form.cardName}
                       onChange={(event) =>
@@ -479,25 +504,34 @@ export function SessionWorkspace({ sessionId }: { sessionId: number }) {
                       }
                       placeholder="Card Name"
                     />
-                    <Badge className="shrink-0" variant="outline">
-                      {form.condition}
-                    </Badge>
                   </div>
 
-                  <div className="flex items-center justify-end px-2">
-                    <Badge variant="secondary">{form.rarity || "Rarity"}</Badge>
+                  <div className="overflow-hidden border-[7px] border-slate-600 bg-slate-200 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.55)]">
+                    {artUrl ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img
+                        className="h-full w-full object-cover"
+                        src={artUrl}
+                        alt=""
+                        onError={(event) => {
+                          setFailedArtUrl(event.currentTarget.src);
+                        }}
+                      />
+                    ) : (
+                      <div className="flex h-full items-center justify-center bg-[radial-gradient(circle_at_50%_35%,#f8fafc_0%,#dbe3ee_48%,#c4ccd8_100%)] text-center">
+                        <div>
+                          <p className="text-sm font-semibold text-slate-700">
+                            Picture
+                          </p>
+                          <p className="mt-1 max-w-44 text-xs text-slate-500">
+                            Search or enter a Serial Number to preview card art.
+                          </p>
+                        </div>
+                      </div>
+                    )}
                   </div>
 
-                  <div className="flex items-center justify-center overflow-hidden border-[6px] border-slate-500 bg-slate-200 text-center">
-                    <div>
-                      <p className="text-sm font-bold text-slate-700">Picture</p>
-                      <p className="mt-1 px-5 text-xs text-slate-500">
-                        Reference art appears here when cached.
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-[1fr_130px] items-center gap-2 border-y border-slate-300 px-2">
+                  <div className="grid grid-cols-[1fr_minmax(96px,130px)] items-center gap-2 border-b border-slate-300 px-1">
                     <Select
                       value={form.edition}
                       onValueChange={(value) =>
@@ -505,7 +539,7 @@ export function SessionWorkspace({ sessionId }: { sessionId: number }) {
                       }
                     >
                       <SelectTrigger
-                        className="h-8 w-full border-0 bg-transparent px-0 text-xs font-bold shadow-none"
+                        className="h-7 w-full border-0 bg-transparent px-0 text-sm font-semibold shadow-none"
                         aria-label="Edition"
                       >
                         <SelectValue />
@@ -519,7 +553,7 @@ export function SessionWorkspace({ sessionId }: { sessionId: number }) {
                       </SelectContent>
                     </Select>
                     <Input
-                      className="h-8 border-sky-500 bg-sky-50 px-2 text-right text-xs font-bold shadow-none"
+                      className="h-7 rounded-sm border border-slate-400 bg-white/65 px-2 text-right text-sm font-semibold shadow-none focus-visible:ring-1"
                       aria-label="Set Code"
                       value={form.setCode}
                       onChange={(event) =>
@@ -529,77 +563,18 @@ export function SessionWorkspace({ sessionId }: { sessionId: number }) {
                     />
                   </div>
 
-                  <div className="grid gap-2 border-2 border-amber-700 bg-white/80 p-2">
-                    <div className="grid grid-cols-2 gap-2">
-                      <Label className="grid gap-1 text-xs font-bold">
-                        Rarity
-                        <Input
-                          className="h-8 bg-background font-normal"
-                          value={form.rarity}
-                          onFocus={() => setRaritySuggestionsOpen(true)}
-                          onChange={(event) => {
-                            updateForm("rarity", event.target.value);
-                            setRaritySuggestionsOpen(true);
-                          }}
-                          required
-                        />
-                      </Label>
-                      <Label className="grid gap-1 text-xs font-bold">
-                        Quantity
-                        <Input
-                          className="h-8 bg-background font-normal"
-                          min={1}
-                          max={999}
-                          type="number"
-                          value={form.quantity}
-                          onChange={(event) =>
-                            updateForm("quantity", Number(event.target.value))
-                          }
-                          required
-                        />
-                      </Label>
-                    </div>
-                    <div className="grid grid-cols-2 gap-2">
-                      <Label className="grid gap-1 text-xs font-bold">
-                        Language
-                        <Input
-                          className="h-8 bg-background font-normal"
-                          value={form.language}
-                          onChange={(event) =>
-                            updateForm("language", event.target.value)
-                          }
-                          required
-                        />
-                      </Label>
-                      <Label className="grid gap-1 text-xs font-bold">
-                        Condition
-                        <Select
-                          value={form.condition}
-                          onValueChange={(value) =>
-                            updateForm(
-                              "condition",
-                              value as EditorForm["condition"],
-                            )
-                          }
-                        >
-                          <SelectTrigger className="h-8 w-full bg-background font-normal">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {CARD_CONDITIONS.map((condition) => (
-                              <SelectItem key={condition} value={condition}>
-                                {condition}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </Label>
+                  <div className="border-2 border-amber-800 bg-[#f8f4e8] p-3 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.7)]">
+                    <div className="h-full border-t border-slate-300">
+                      <div className="mt-2 h-2 border-b border-slate-300" />
+                      <div className="mt-3 h-2 border-b border-slate-300" />
+                      <div className="mt-3 h-2 border-b border-slate-300" />
+                      <div className="mt-3 h-2 border-b border-slate-300" />
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-[120px_1fr] items-end gap-2">
+                  <div className="grid grid-cols-[128px_1fr] items-end gap-2">
                     <Input
-                      className="h-8 border-emerald-500 bg-emerald-50 px-2 text-xs font-bold shadow-none"
+                      className="h-7 rounded-sm border border-slate-400 bg-white/75 px-2 text-sm font-semibold shadow-none focus-visible:ring-1"
                       aria-label="Serial Number"
                       value={form.serialNumber}
                       onChange={(event) =>
@@ -607,8 +582,8 @@ export function SessionWorkspace({ sessionId }: { sessionId: number }) {
                       }
                       placeholder="00000000"
                     />
-                    <div className="text-right text-xs font-bold text-slate-600">
-                      Session Item Editor
+                    <div className="border-t border-slate-300 pb-1 text-right text-xs font-semibold text-slate-500">
+                      ©1996 KAZUKI TAKAHASHI
                     </div>
                   </div>
                 </div>
@@ -683,6 +658,67 @@ export function SessionWorkspace({ sessionId }: { sessionId: number }) {
                         )}
                       </div>
                     ) : null}
+                  </div>
+
+                  <div className="grid gap-3 rounded-lg border bg-background p-3 md:grid-cols-2">
+                    <Label className="grid gap-1 text-sm font-semibold">
+                      Rarity
+                      <Input
+                        className="h-10 font-normal"
+                        value={form.rarity}
+                        onFocus={() => setRaritySuggestionsOpen(true)}
+                        onChange={(event) => {
+                          updateForm("rarity", event.target.value);
+                          setRaritySuggestionsOpen(true);
+                        }}
+                        required
+                      />
+                    </Label>
+                    <Label className="grid gap-1 text-sm font-semibold">
+                      Quantity
+                      <Input
+                        className="h-10 font-normal"
+                        min={1}
+                        max={999}
+                        type="number"
+                        value={form.quantity}
+                        onChange={(event) =>
+                          updateForm("quantity", Number(event.target.value))
+                        }
+                        required
+                      />
+                    </Label>
+                    <Label className="grid gap-1 text-sm font-semibold">
+                      Language
+                      <Input
+                        className="h-10 font-normal"
+                        value={form.language}
+                        onChange={(event) =>
+                          updateForm("language", event.target.value)
+                        }
+                        required
+                      />
+                    </Label>
+                    <Label className="grid gap-1 text-sm font-semibold">
+                      Condition
+                      <Select
+                        value={form.condition}
+                        onValueChange={(value) =>
+                          updateForm("condition", value as EditorForm["condition"])
+                        }
+                      >
+                        <SelectTrigger className="h-10 w-full font-normal">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {CARD_CONDITIONS.map((condition) => (
+                            <SelectItem key={condition} value={condition}>
+                              {condition}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </Label>
                   </div>
 
                   {raritySuggestionsOpen && rarityOptions.length > 0 ? (
@@ -817,15 +853,15 @@ function NavigatorSection({
         {title}
       </h3>
       {items.length === 0 ? (
-        <p className="rounded-md border bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
+        <p className="max-w-full rounded-md border bg-muted/30 px-3 py-2 text-sm text-muted-foreground">
           No items.
         </p>
       ) : (
-        <ul className="grid gap-2 p-0">
+        <ul className="grid min-w-0 gap-2 p-0">
           {items.map((item) => (
-            <li key={item.id}>
+            <li className="min-w-0" key={item.id}>
               <button
-                className={`block w-full rounded-md border px-3 py-2 text-left text-sm ${
+                className={`block w-full max-w-full overflow-hidden rounded-md border px-3 py-2 text-left text-sm ${
                   currentId === item.id
                     ? "border-primary bg-primary/10"
                     : "bg-background hover:bg-muted"

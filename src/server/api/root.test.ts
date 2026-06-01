@@ -323,6 +323,42 @@ describe("appRouter", () => {
     }
   });
 
+  it("returns card metadata art for session workspace items", async () => {
+    const { caller, db, close } = createTestCaller();
+
+    try {
+      const session = await caller.sessions.create();
+      await db.insert(schema.cardMetadataCards).values({
+        passcode: "46986414",
+        name: "Dark Magician",
+        normalizedName: "dark magician",
+        cardType: "Normal Monster",
+        imageUrl: "https://images.ygoprodeck.com/images/cards_small/46986414.jpg",
+      });
+      await db.insert(schema.sessionItems).values({
+        sessionId: session.id,
+        entrySource: "manual",
+        cardName: "Dark Magician",
+        setCode: "LOB-005",
+        passcode: "46986414",
+        rarity: "Ultra Rare",
+        printingIdentityTrusted: true,
+        edition: "1st Edition",
+        language: "English",
+        condition: "Mint",
+        quantity: 1,
+      });
+
+      const [item] = await caller.sessions.items({ id: session.id });
+
+      expect(item?.cardImageUrl).toBe(
+        "https://images.ygoprodeck.com/images/cards_small/46986414.jpg",
+      );
+    } finally {
+      close();
+    }
+  });
+
   it("promotes rarity-confirmed items to successfully scanned", async () => {
     const restoreFetch = mockYgoPriceResponse({
       data: [

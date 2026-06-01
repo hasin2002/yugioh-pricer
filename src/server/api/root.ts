@@ -13,6 +13,7 @@ import {
 } from "@/lib/printing-options";
 import { fetchAndStorePriceSnapshot } from "@/server/cards/pricing";
 import {
+  cardMetadataCards,
   priceSnapshots,
   pricingSessions,
   sessionItems,
@@ -417,12 +418,14 @@ function pricingIssueLabel(snapshot: PriceSnapshot | null) {
 function serializeSessionItem(
   item: typeof sessionItems.$inferSelect,
   latestSnapshot: PriceSnapshot | null = null,
+  cardImageUrl: string | null = null,
 ) {
   const reviewReason = reviewReasonFor(item);
 
   return {
     ...item,
     serialNumber: item.passcode,
+    cardImageUrl,
     reviewReason,
     reviewStatus: reviewReason ? ("requires_review" as const) : ("success" as const),
     latestPriceSnapshot: serializePriceSnapshot(latestSnapshot),
@@ -610,11 +613,19 @@ export const appRouter = router({
     items: publicProcedure
       .input(sessionIdInputSchema)
       .query(async ({ ctx, input }) => {
-        const items = await ctx.db
-          .select()
+        const itemRows = await ctx.db
+          .select({
+            item: sessionItems,
+            cardImageUrl: cardMetadataCards.imageUrl,
+          })
           .from(sessionItems)
+          .leftJoin(
+            cardMetadataCards,
+            eq(sessionItems.passcode, cardMetadataCards.passcode),
+          )
           .where(eq(sessionItems.sessionId, input.id))
           .orderBy(desc(sessionItems.createdAt));
+        const items = itemRows.map((row) => row.item);
         const snapshots =
           items.length > 0
             ? await ctx.db
@@ -629,8 +640,12 @@ export const appRouter = router({
             : [];
         const latestSnapshots = latestSnapshotsByItemId(snapshots);
 
-        return items.map((item) =>
-          serializeSessionItem(item, latestSnapshots.get(item.id) ?? null),
+        return itemRows.map((row) =>
+          serializeSessionItem(
+            row.item,
+            latestSnapshots.get(row.item.id) ?? null,
+            row.cardImageUrl,
+          ),
         );
       }),
     addManualItem: publicProcedure
