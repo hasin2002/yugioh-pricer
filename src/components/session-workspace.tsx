@@ -398,8 +398,8 @@ export function SessionWorkspace({ sessionId }: { sessionId: number }) {
   const cardNameStyle = {
     ...cardTextStyle,
     fontSize: `${Math.max(
-      18,
-      Math.min(25, 460 / Math.max(form.cardName.trim().length, 16)),
+      16,
+      Math.min(23, 500 / Math.max(form.cardName.trim().length, 16)),
     )}px`,
   };
 
@@ -502,9 +502,9 @@ export function SessionWorkspace({ sessionId }: { sessionId: number }) {
 
           <div className="grid gap-8 xl:grid-cols-[minmax(330px,450px)_minmax(0,1fr)] xl:items-start">
             <section aria-label="Card-shaped Session Item Editor">
-              <div className="mx-auto aspect-[59/86] w-full max-w-[410px] rounded-[7px] border-[6px] border-slate-800 bg-slate-800 p-[2.4%] shadow-[0_24px_60px_rgba(15,23,42,0.24)]">
-                <div className="grid h-full grid-rows-[9.5%_47%_4.5%_22.5%_3.2%] gap-[1.25%] rounded-[2px] border border-[#5f3521] bg-[radial-gradient(circle_at_24%_16%,rgba(255,231,169,0.72)_0,rgba(255,231,169,0)_24%),radial-gradient(circle_at_74%_34%,rgba(106,58,35,0.24)_0,rgba(106,58,35,0)_28%),linear-gradient(135deg,#bf7650_0%,#e1a46b_35%,#a85f3d_68%,#d8915e_100%)] p-[4%] shadow-inner">
-                  <div className="mx-auto flex w-[84%] min-w-0 items-center border-[3px] border-[#8a5737] bg-[linear-gradient(90deg,rgba(255,229,164,0.55),rgba(118,62,39,0.18),rgba(255,235,184,0.42))] px-3 shadow-[inset_0_1px_3px_rgba(255,255,255,0.55),inset_0_-2px_4px_rgba(61,32,19,0.26)]">
+              <div className="mx-auto aspect-[59/86] w-full max-w-[405px] rounded-[7px] border-[6px] border-slate-800 bg-slate-800 p-[2.4%] shadow-[0_24px_60px_rgba(15,23,42,0.24)]">
+                <div className="grid h-full grid-rows-[8%_52%_4%_28%_4%] gap-[1%] rounded-[2px] border border-[#5f3521] bg-[radial-gradient(circle_at_24%_16%,rgba(255,231,169,0.72)_0,rgba(255,231,169,0)_24%),radial-gradient(circle_at_74%_34%,rgba(106,58,35,0.24)_0,rgba(106,58,35,0)_28%),linear-gradient(135deg,#bf7650_0%,#e1a46b_35%,#a85f3d_68%,#d8915e_100%)] p-[3.6%] shadow-inner">
+                  <div className="mx-auto flex w-[84%] min-w-0 items-center border-[3px] border-[#8a5737] bg-[linear-gradient(90deg,rgba(255,229,164,0.55),rgba(118,62,39,0.18),rgba(255,235,184,0.42))] px-2 shadow-[inset_0_1px_3px_rgba(255,255,255,0.55),inset_0_-2px_4px_rgba(61,32,19,0.26)]">
                     <Input
                       className="h-full min-w-0 border-0 bg-transparent px-0 py-0 font-normal uppercase leading-none tracking-normal text-[#1f130c] shadow-none placeholder:text-[#6f472d]/70 focus-visible:ring-0"
                       style={cardNameStyle}
@@ -518,7 +518,7 @@ export function SessionWorkspace({ sessionId }: { sessionId: number }) {
                   </div>
 
                   <div className="flex min-h-0 items-center justify-center">
-                    <div className="aspect-[1/1] h-full max-h-full w-[84%] overflow-hidden border-[7px] border-[#4f5b63] bg-[#252c32] shadow-[0_3px_8px_rgba(38,20,12,0.45),inset_0_0_0_1px_rgba(255,255,255,0.22)]">
+                    <div className="aspect-square w-[84%] overflow-hidden border-[7px] border-[#4f5b63] bg-[#252c32] shadow-[0_3px_8px_rgba(38,20,12,0.45),inset_0_0_0_1px_rgba(255,255,255,0.22)]">
                       {artUrl ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img
