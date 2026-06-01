@@ -504,9 +504,9 @@ export function SessionWorkspace({ sessionId }: { sessionId: number }) {
 
           <div className="grid gap-8 xl:grid-cols-[minmax(330px,450px)_minmax(0,1fr)] xl:items-start">
             <section aria-label="Card-shaped Session Item Editor">
-              <div className="mx-auto aspect-[59/86] w-full max-w-[405px] rounded-[7px] border-[6px] border-slate-800 bg-slate-800 p-[2.4%] shadow-[0_24px_60px_rgba(15,23,42,0.24)]">
-                <div className="grid h-full grid-rows-[8%_52%_4%_28%_4%] gap-[1%] rounded-[2px] border border-[#5f3521] bg-[radial-gradient(circle_at_24%_16%,rgba(255,231,169,0.72)_0,rgba(255,231,169,0)_24%),radial-gradient(circle_at_74%_34%,rgba(106,58,35,0.24)_0,rgba(106,58,35,0)_28%),linear-gradient(135deg,#bf7650_0%,#e1a46b_35%,#a85f3d_68%,#d8915e_100%)] p-[3.6%] shadow-inner">
-                  <div className="mx-auto flex w-[84%] min-w-0 items-center overflow-hidden border-[3px] border-[#8a5737] bg-[linear-gradient(90deg,rgba(255,229,164,0.55),rgba(118,62,39,0.18),rgba(255,235,184,0.42))] px-2 shadow-[inset_0_1px_3px_rgba(255,255,255,0.55),inset_0_-2px_4px_rgba(61,32,19,0.26)]">
+              <div className="mx-auto aspect-[59/86] w-full max-w-[405px] rounded-[7px] border-[5px] border-[#273342] bg-[#273342] p-[2.1%] shadow-[0_24px_60px_rgba(15,23,42,0.22)]">
+                <div className="grid h-full grid-rows-[8%_52%_5.5%_25.5%_4%] gap-[1%] rounded-[2px] border border-[#6f432b] bg-[radial-gradient(circle_at_24%_16%,rgba(255,231,169,0.72)_0,rgba(255,231,169,0)_24%),radial-gradient(circle_at_74%_34%,rgba(106,58,35,0.24)_0,rgba(106,58,35,0)_28%),linear-gradient(135deg,#bf7650_0%,#e1a46b_35%,#a85f3d_68%,#d8915e_100%)] p-[3.2%] shadow-inner">
+                  <div className="mx-auto flex w-[88%] min-w-0 items-center overflow-hidden border-[2px] border-[#8a5737] bg-[linear-gradient(90deg,rgba(255,229,164,0.55),rgba(118,62,39,0.18),rgba(255,235,184,0.42))] px-2 shadow-[inset_0_1px_3px_rgba(255,255,255,0.55),inset_0_-2px_4px_rgba(61,32,19,0.26)]">
                     <Input
                       className="h-full min-w-0 border-0 bg-transparent px-0 py-0 font-normal uppercase leading-none tracking-normal text-[#1f130c] shadow-none placeholder:text-[#6f472d]/70 focus-visible:ring-0"
                       style={cardNameStyle}
@@ -519,8 +519,8 @@ export function SessionWorkspace({ sessionId }: { sessionId: number }) {
                     />
                   </div>
 
-                  <div className="flex min-h-0 items-start justify-center pt-[3%]">
-                    <div className="aspect-square w-[84%] overflow-hidden border-[7px] border-[#4f5b63] bg-[#252c32] shadow-[0_3px_8px_rgba(38,20,12,0.45),inset_0_0_0_1px_rgba(255,255,255,0.22)]">
+                  <div className="flex min-h-0 items-start justify-center pt-[2%]">
+                    <div className="aspect-square h-full max-h-full max-w-[86%] overflow-hidden border-[5px] border-[#56626b] bg-[#252c32] shadow-[0_3px_8px_rgba(38,20,12,0.38),inset_0_0_0_1px_rgba(255,255,255,0.2)]">
                       {artUrl ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img
@@ -546,7 +546,7 @@ export function SessionWorkspace({ sessionId }: { sessionId: number }) {
                     </div>
                   </div>
 
-                  <div className="mx-auto grid w-[84%] grid-cols-[1fr_minmax(96px,132px)] items-center gap-2">
+                  <div className="mx-auto grid w-[88%] grid-cols-[1fr_minmax(96px,132px)] items-center gap-2">
                     <Select
                       value={form.edition}
                       onValueChange={(value) =>
@@ -554,7 +554,7 @@ export function SessionWorkspace({ sessionId }: { sessionId: number }) {
                       }
                     >
                       <SelectTrigger
-                        className="h-7 w-full border-0 bg-transparent px-0 py-0 text-[15px] font-normal leading-none text-[#24160d] shadow-none focus-visible:ring-0 [&>svg]:hidden"
+                        className="h-6 w-full border-0 bg-transparent px-0 py-0 text-[14px] font-normal leading-none text-[#24160d] shadow-none focus-visible:ring-0 [&>svg]:hidden"
                         style={cardTextStyle}
                         aria-label="Edition"
                       >
@@ -569,7 +569,7 @@ export function SessionWorkspace({ sessionId }: { sessionId: number }) {
                       </SelectContent>
                     </Select>
                     <Input
-                      className="h-7 border-0 bg-transparent px-0 py-0 text-right text-[15px] font-normal leading-none text-[#24160d] shadow-none placeholder:text-[#6f472d]/70 focus-visible:ring-0"
+                      className="h-6 border-0 bg-transparent px-0 py-0 text-right text-[14px] font-normal leading-none text-[#24160d] shadow-none placeholder:text-[#6f472d]/70 focus-visible:ring-0"
                       style={cardTextStyle}
                       aria-label="Set Code"
                       value={form.setCode}
@@ -580,9 +580,9 @@ export function SessionWorkspace({ sessionId }: { sessionId: number }) {
                     />
                   </div>
 
-                  <div className="mx-auto w-[84%] border-[3px] border-[#8c4935] bg-[#f4ead2] shadow-[inset_0_0_0_1px_rgba(255,255,255,0.72),0_1px_3px_rgba(50,24,12,0.28)]" />
+                  <div className="mx-auto w-[88%] border-[2px] border-[#8c4935] bg-[#f4ead2] shadow-[inset_0_0_0_1px_rgba(255,255,255,0.72),0_1px_3px_rgba(50,24,12,0.24)]" />
 
-                  <div className="mx-auto grid w-[84%] grid-cols-[112px_1fr] items-end gap-2">
+                  <div className="mx-auto grid w-[88%] grid-cols-[112px_1fr] items-end gap-2">
                     <Input
                       className="h-6 border-0 bg-transparent px-0 py-0 text-[15px] font-normal leading-none text-[#1f130c] shadow-none placeholder:text-[#6f472d]/70 focus-visible:ring-0"
                       style={cardTextStyle}
