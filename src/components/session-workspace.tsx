@@ -490,13 +490,13 @@ export function SessionWorkspace({ sessionId }: { sessionId: number }) {
             </Card>
           </header>
 
-          <div className="grid gap-8 xl:grid-cols-[minmax(360px,470px)_minmax(0,1fr)] xl:items-start">
+          <div className="grid gap-8 xl:grid-cols-[minmax(360px,500px)_minmax(0,1fr)] xl:items-start">
             <section aria-label="Card-shaped Session Item Editor">
-              <div className="mx-auto aspect-[59/86] w-full max-w-[450px] rounded-[18px] border border-slate-700 bg-[linear-gradient(135deg,#dfe3e8_0%,#f8fafc_42%,#c8ced8_100%)] p-[4.6%] shadow-[0_22px_55px_rgba(15,23,42,0.18)]">
-                <div className="grid h-full grid-rows-[10%_45%_4.6%_22%_5%] gap-[2%] rounded-[9px] border border-slate-400 bg-[linear-gradient(135deg,#f7f8fa_0%,#e7ebf1_52%,#fdfdfd_100%)] p-[4%] shadow-inner">
-                  <div className="flex min-w-0 items-end border-b-2 border-slate-400 px-2 pb-1">
+              <div className="mx-auto aspect-[59/86] w-full max-w-[470px] rounded-[7px] border-[6px] border-slate-800 bg-slate-800 p-[2.4%] shadow-[0_24px_60px_rgba(15,23,42,0.24)]">
+                <div className="grid h-full grid-rows-[10%_46%_4.5%_22%_5%] gap-[1.7%] rounded-[2px] border border-[#5f3521] bg-[radial-gradient(circle_at_24%_16%,rgba(255,231,169,0.72)_0,rgba(255,231,169,0)_24%),radial-gradient(circle_at_74%_34%,rgba(106,58,35,0.24)_0,rgba(106,58,35,0)_28%),linear-gradient(135deg,#bf7650_0%,#e1a46b_35%,#a85f3d_68%,#d8915e_100%)] p-[4.6%] shadow-inner">
+                  <div className="flex min-w-0 items-center border-[3px] border-[#8a5737] bg-[linear-gradient(90deg,rgba(255,229,164,0.55),rgba(118,62,39,0.18),rgba(255,235,184,0.42))] px-3 shadow-[inset_0_1px_3px_rgba(255,255,255,0.55),inset_0_-2px_4px_rgba(61,32,19,0.26)]">
                     <Input
-                      className="h-9 min-w-0 border-0 bg-transparent px-0 text-[clamp(16px,4vw,24px)] font-semibold uppercase tracking-normal shadow-none focus-visible:ring-0"
+                      className="h-full min-w-0 border-0 bg-transparent px-0 font-serif text-[clamp(22px,5vw,34px)] font-medium uppercase tracking-normal text-[#1f130c] shadow-none placeholder:text-[#6f472d]/70 focus-visible:ring-0"
                       aria-label="Card name"
                       value={form.cardName}
                       onChange={(event) =>
@@ -506,32 +506,34 @@ export function SessionWorkspace({ sessionId }: { sessionId: number }) {
                     />
                   </div>
 
-                  <div className="overflow-hidden border-[7px] border-slate-600 bg-slate-200 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.55)]">
-                    {artUrl ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        className="h-full w-full object-cover"
-                        src={artUrl}
-                        alt=""
-                        onError={(event) => {
-                          setFailedArtUrl(event.currentTarget.src);
-                        }}
-                      />
-                    ) : (
-                      <div className="flex h-full items-center justify-center bg-[radial-gradient(circle_at_50%_35%,#f8fafc_0%,#dbe3ee_48%,#c4ccd8_100%)] text-center">
-                        <div>
-                          <p className="text-sm font-semibold text-slate-700">
-                            Picture
-                          </p>
-                          <p className="mt-1 max-w-44 text-xs text-slate-500">
-                            Search or enter a Serial Number to preview card art.
-                          </p>
+                  <div className="flex min-h-0 items-center justify-center">
+                    <div className="aspect-[1/1] h-full max-h-full max-w-[84%] overflow-hidden border-[7px] border-[#4f5b63] bg-[#252c32] shadow-[0_3px_8px_rgba(38,20,12,0.45),inset_0_0_0_1px_rgba(255,255,255,0.22)]">
+                      {artUrl ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          className="h-full w-full object-contain"
+                          src={artUrl}
+                          alt=""
+                          onError={(event) => {
+                            setFailedArtUrl(event.currentTarget.src);
+                          }}
+                        />
+                      ) : (
+                        <div className="flex h-full items-center justify-center bg-[radial-gradient(circle_at_50%_35%,#efe7c8_0%,#caa86f_48%,#775038_100%)] text-center">
+                          <div>
+                            <p className="font-serif text-base font-semibold text-[#2c1b11]">
+                              Picture
+                            </p>
+                            <p className="mt-1 max-w-44 text-xs text-[#4f3524]">
+                              Search or enter a Serial Number to preview card art.
+                            </p>
+                          </div>
                         </div>
-                      </div>
-                    )}
+                      )}
+                    </div>
                   </div>
 
-                  <div className="grid grid-cols-[1fr_minmax(96px,130px)] items-center gap-2 border-b border-slate-300 px-1">
+                  <div className="grid grid-cols-[1fr_minmax(96px,132px)] items-center gap-2 px-[8%]">
                     <Select
                       value={form.edition}
                       onValueChange={(value) =>
@@ -539,7 +541,7 @@ export function SessionWorkspace({ sessionId }: { sessionId: number }) {
                       }
                     >
                       <SelectTrigger
-                        className="h-7 w-full border-0 bg-transparent px-0 text-sm font-semibold shadow-none"
+                        className="h-7 w-full border-0 bg-transparent px-0 font-serif text-[15px] font-bold text-[#24160d] shadow-none focus-visible:ring-0 [&>svg]:hidden"
                         aria-label="Edition"
                       >
                         <SelectValue />
@@ -553,7 +555,7 @@ export function SessionWorkspace({ sessionId }: { sessionId: number }) {
                       </SelectContent>
                     </Select>
                     <Input
-                      className="h-7 rounded-sm border border-slate-400 bg-white/65 px-2 text-right text-sm font-semibold shadow-none focus-visible:ring-1"
+                      className="h-7 border-0 bg-transparent px-0 text-right font-serif text-[15px] font-bold text-[#24160d] shadow-none placeholder:text-[#6f472d]/70 focus-visible:ring-0"
                       aria-label="Set Code"
                       value={form.setCode}
                       onChange={(event) =>
@@ -563,18 +565,11 @@ export function SessionWorkspace({ sessionId }: { sessionId: number }) {
                     />
                   </div>
 
-                  <div className="border-2 border-amber-800 bg-[#f8f4e8] p-3 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.7)]">
-                    <div className="h-full border-t border-slate-300">
-                      <div className="mt-2 h-2 border-b border-slate-300" />
-                      <div className="mt-3 h-2 border-b border-slate-300" />
-                      <div className="mt-3 h-2 border-b border-slate-300" />
-                      <div className="mt-3 h-2 border-b border-slate-300" />
-                    </div>
-                  </div>
+                  <div className="mx-[4%] border-[3px] border-[#8c4935] bg-[#f4ead2] shadow-[inset_0_0_0_1px_rgba(255,255,255,0.72),0_1px_3px_rgba(50,24,12,0.28)]" />
 
-                  <div className="grid grid-cols-[128px_1fr] items-end gap-2">
+                  <div className="grid grid-cols-[132px_1fr] items-end gap-2 px-[1%]">
                     <Input
-                      className="h-7 rounded-sm border border-slate-400 bg-white/75 px-2 text-sm font-semibold shadow-none focus-visible:ring-1"
+                      className="h-7 border-0 bg-transparent px-0 font-serif text-[15px] font-bold text-[#1f130c] shadow-none placeholder:text-[#6f472d]/70 focus-visible:ring-0"
                       aria-label="Serial Number"
                       value={form.serialNumber}
                       onChange={(event) =>
@@ -582,7 +577,7 @@ export function SessionWorkspace({ sessionId }: { sessionId: number }) {
                       }
                       placeholder="00000000"
                     />
-                    <div className="border-t border-slate-300 pb-1 text-right text-xs font-semibold text-slate-500">
+                    <div className="pb-1 text-right font-serif text-xs font-bold text-[#3f2a1c]">
                       ©1996 KAZUKI TAKAHASHI
                     </div>
                   </div>
