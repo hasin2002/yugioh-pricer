@@ -21,28 +21,22 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import {
+  captureStateLabel,
+  captureStateTone,
+  type CaptureState,
+} from "@/lib/capture-state";
 import { captureFrameQuality } from "@/lib/capture-quality";
 import {
   isCapturedSceneResetFrame,
   signatureDistance,
 } from "@/lib/capture-signature";
+import { cn } from "@/lib/utils";
 
 type RouterOutputs = inferRouterOutputs<AppRouter>;
 type JoinedSession = NonNullable<
   RouterOutputs["capture"]["join"]["session"]
 >;
-type CaptureState =
-  | "joining"
-  | "checking"
-  | "detecting"
-  | "hold_steady"
-  | "uploading"
-  | "captured"
-  | "already_captured"
-  | "needs_review"
-  | "claimed"
-  | "archived"
-  | "error";
 type CandidateFrame = {
   blob: Blob;
   cardLike: boolean;
@@ -87,6 +81,7 @@ export function CaptureClient() {
   const [clientId, setClientId] = useState<string | null>(null);
   const [capturedItem, setCapturedItem] = useState<CapturedItem | null>(null);
   const [quantityUpdating, setQuantityUpdating] = useState(false);
+  const stateTone = captureStateTone(captureState);
 
   const trpc = useMemo(
     () =>
@@ -556,11 +551,28 @@ export function CaptureClient() {
           </CardHeader>
 
           <CardContent>
-            <div className="mb-4 rounded-lg border bg-muted/40 p-3">
-              <p className="text-sm font-bold" data-state={captureState}>
+            <div
+              className={cn(
+                "mb-4 rounded-lg border p-3 transition-colors",
+                stateTone.panelClassName,
+              )}
+            >
+              <p
+                className={cn(
+                  "flex items-center gap-2 text-sm font-bold",
+                  stateTone.labelClassName,
+                )}
+                data-state={captureState}
+              >
+                <span
+                  className={cn("h-2.5 w-2.5 rounded-full", stateTone.dotClassName)}
+                  aria-hidden="true"
+                />
                 {captureStateLabel(captureState)}
               </p>
-              <p className="mt-1 text-sm text-muted-foreground">{message}</p>
+              <p className={cn("mt-1 text-sm", stateTone.messageClassName)}>
+                {message}
+              </p>
               {joinedSession?.archivedAt && captureState === "archived" ? (
                 <Alert className="mt-3 border-amber-200 bg-amber-50 text-amber-800">
                   <AlertTriangle className="h-4 w-4" aria-hidden="true" />
@@ -684,33 +696,6 @@ function captureClientId() {
   window.localStorage.setItem(storageKey, next);
 
   return next;
-}
-
-function captureStateLabel(state: CaptureState) {
-  switch (state) {
-    case "joining":
-      return "Joining";
-    case "checking":
-      return "Checking";
-    case "detecting":
-      return "Detecting";
-    case "hold_steady":
-      return "Hold steady";
-    case "uploading":
-      return "Uploading";
-    case "captured":
-      return "Captured";
-    case "already_captured":
-      return "Already captured";
-    case "needs_review":
-      return "Needs review";
-    case "claimed":
-      return "Already active";
-    case "archived":
-      return "Archived session";
-    case "error":
-      return "Action needed";
-  }
 }
 
 async function captureCandidateFrame(
