@@ -333,6 +333,7 @@ describe("appRouter", () => {
         name: "Dark Magician",
         normalizedName: "dark magician",
         cardType: "Normal Monster",
+        frameType: "normal",
         imageUrl: "https://images.ygoprodeck.com/images/cards_small/46986414.jpg",
       });
       await db.insert(schema.sessionItems).values({
@@ -354,6 +355,8 @@ describe("appRouter", () => {
       expect(item?.cardImageUrl).toBe(
         "https://images.ygoprodeck.com/images/cards_small/46986414.jpg",
       );
+      expect(item?.cardType).toBe("Normal Monster");
+      expect(item?.frameType).toBe("normal");
     } finally {
       close();
     }

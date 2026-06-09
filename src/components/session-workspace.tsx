@@ -46,6 +46,8 @@ type EditorForm = {
   setCode: string;
   serialNumber: string;
   cardImageUrl: string | null;
+  cardType: string | null;
+  frameType: string | null;
   rarity: string;
   edition: (typeof CARD_EDITIONS)[number];
   language: string;
@@ -67,6 +69,8 @@ function emptyEditorForm(): EditorForm {
     setCode: "",
     serialNumber: "",
     cardImageUrl: null,
+    cardType: null,
+    frameType: null,
     rarity: "",
     edition: "1st Edition",
     language: DEFAULT_CARD_LANGUAGE,
@@ -83,6 +87,8 @@ function formForItem(item: SessionItem): EditorForm {
     setCode: item.setCode,
     serialNumber: item.serialNumber,
     cardImageUrl: item.cardImageUrl,
+    cardType: item.cardType,
+    frameType: item.frameType,
     rarity: item.rarity,
     edition: item.edition as EditorForm["edition"],
     language: item.language,
@@ -135,6 +141,121 @@ function croppedCardArtUrl(serialNumber: string, imageUrl: string | null) {
   return imageUrl
     .replace("/images/cards_small/", "/images/cards_cropped/")
     .replace("/images/cards/", "/images/cards_cropped/");
+}
+
+function cardFramePalette(frameType: string | null, cardType: string | null) {
+  const frame = frameType?.toLowerCase() ?? "";
+  const type = cardType?.toLowerCase() ?? "";
+
+  if (frame.includes("spell") || type.includes("spell")) {
+    return {
+      border: "#20465a",
+      background:
+        "radial-gradient(circle_at_24%_16%,rgba(177,238,232,0.62)_0,rgba(177,238,232,0)_24%),radial-gradient(circle_at_72%_34%,rgba(18,99,113,0.3)_0,rgba(18,99,113,0)_30%),linear-gradient(135deg,#157b86_0%,#49b6b0_36%,#0d6b79_68%,#28a6a2_100%)",
+      titleBorder: "#1c6370",
+      titleBackground:
+        "linear-gradient(90deg,rgba(194,246,239,0.6),rgba(14,92,105,0.2),rgba(206,255,246,0.44))",
+      effectBackground: "#dceff2",
+      effectBorder: "#1f6b78",
+      text: "#071b1f",
+    };
+  }
+
+  if (frame.includes("trap") || type.includes("trap")) {
+    return {
+      border: "#5c2b4f",
+      background:
+        "radial-gradient(circle_at_24%_16%,rgba(255,191,228,0.52)_0,rgba(255,191,228,0)_24%),radial-gradient(circle_at_72%_34%,rgba(105,29,83,0.28)_0,rgba(105,29,83,0)_30%),linear-gradient(135deg,#a34482_0%,#d678ae_38%,#87366c_70%,#c65e9d_100%)",
+      titleBorder: "#75345f",
+      titleBackground:
+        "linear-gradient(90deg,rgba(255,209,235,0.58),rgba(117,52,95,0.18),rgba(255,220,241,0.42))",
+      effectBackground: "#f3dfed",
+      effectBorder: "#87366c",
+      text: "#24111f",
+    };
+  }
+
+  if (frame.includes("xyz")) {
+    return {
+      border: "#1d2228",
+      background:
+        "radial-gradient(circle_at_24%_16%,rgba(210,210,200,0.35)_0,rgba(210,210,200,0)_24%),linear-gradient(135deg,#1b1d21_0%,#4b4d50_38%,#08090b_70%,#323438_100%)",
+      titleBorder: "#4b4d50",
+      titleBackground:
+        "linear-gradient(90deg,rgba(230,226,210,0.32),rgba(20,20,22,0.38),rgba(240,238,222,0.18))",
+      effectBackground: "#e8e0d0",
+      effectBorder: "#504331",
+      text: "#f5f0df",
+    };
+  }
+
+  if (frame.includes("link")) {
+    return {
+      border: "#17315f",
+      background:
+        "radial-gradient(circle_at_24%_16%,rgba(154,211,255,0.5)_0,rgba(154,211,255,0)_24%),radial-gradient(circle_at_72%_34%,rgba(25,68,148,0.3)_0,rgba(25,68,148,0)_30%),linear-gradient(135deg,#1d4f95_0%,#438bd3_38%,#12376d_70%,#2b6ebc_100%)",
+      titleBorder: "#244f8e",
+      titleBackground:
+        "linear-gradient(90deg,rgba(188,226,255,0.56),rgba(35,80,142,0.2),rgba(213,236,255,0.42))",
+      effectBackground: "#dce9f5",
+      effectBorder: "#23528f",
+      text: "#07182f",
+    };
+  }
+
+  if (frame.includes("ritual") || type.includes("ritual")) {
+    return {
+      border: "#294f88",
+      background:
+        "radial-gradient(circle_at_24%_16%,rgba(187,222,255,0.58)_0,rgba(187,222,255,0)_24%),radial-gradient(circle_at_72%_34%,rgba(51,89,155,0.28)_0,rgba(51,89,155,0)_30%),linear-gradient(135deg,#3769ad_0%,#7ea8db_38%,#28528f_70%,#5f8fc9_100%)",
+      titleBorder: "#315d99",
+      titleBackground:
+        "linear-gradient(90deg,rgba(205,229,255,0.58),rgba(49,93,153,0.2),rgba(225,241,255,0.42))",
+      effectBackground: "#e2ecf6",
+      effectBorder: "#3c6aa5",
+      text: "#0b1c35",
+    };
+  }
+
+  if (frame.includes("fusion")) {
+    return {
+      border: "#45305f",
+      background:
+        "radial-gradient(circle_at_24%_16%,rgba(223,190,255,0.58)_0,rgba(223,190,255,0)_24%),radial-gradient(circle_at_72%_34%,rgba(79,45,124,0.3)_0,rgba(79,45,124,0)_30%),linear-gradient(135deg,#7252a1_0%,#aa7bc8_36%,#5a3d88_68%,#9163b1_100%)",
+      titleBorder: "#66468a",
+      titleBackground:
+        "linear-gradient(90deg,rgba(231,207,255,0.58),rgba(102,70,138,0.2),rgba(241,222,255,0.42))",
+      effectBackground: "#ece2f2",
+      effectBorder: "#76519a",
+      text: "#180f21",
+    };
+  }
+
+  if (frame.includes("synchro")) {
+    return {
+      border: "#6f747b",
+      background:
+        "radial-gradient(circle_at_24%_16%,rgba(255,255,255,0.78)_0,rgba(255,255,255,0)_24%),radial-gradient(circle_at_72%_34%,rgba(120,128,138,0.24)_0,rgba(120,128,138,0)_30%),linear-gradient(135deg,#d8dce1_0%,#f8f8f5_38%,#b6bdc6_70%,#ececea_100%)",
+      titleBorder: "#9ca3ad",
+      titleBackground:
+        "linear-gradient(90deg,rgba(255,255,255,0.72),rgba(150,157,166,0.22),rgba(255,255,255,0.5))",
+      effectBackground: "#f5f2e5",
+      effectBorder: "#9f5d46",
+      text: "#111827",
+    };
+  }
+
+  return {
+    border: "#6f432b",
+    background:
+      "radial-gradient(circle_at_24%_16%,rgba(255,231,169,0.72)_0,rgba(255,231,169,0)_24%),radial-gradient(circle_at_74%_34%,rgba(106,58,35,0.24)_0,rgba(106,58,35,0)_28%),linear-gradient(135deg,#bf7650_0%,#e1a46b_35%,#a85f3d_68%,#d8915e_100%)",
+    titleBorder: "#8a5737",
+    titleBackground:
+      "linear-gradient(90deg,rgba(255,229,164,0.55),rgba(118,62,39,0.18),rgba(255,235,184,0.42))",
+    effectBackground: "#f4ead2",
+    effectBorder: "#8c4935",
+    text: "#1f130c",
+  };
 }
 
 export function SessionWorkspace({ sessionId }: { sessionId: number }) {
@@ -301,6 +422,8 @@ export function SessionWorkspace({ sessionId }: { sessionId: number }) {
       setCode: result.setCode ?? current.setCode,
       serialNumber: result.passcode,
       cardImageUrl: result.imageUrl,
+      cardType: result.cardType,
+      frameType: result.frameType,
       rarity: result.rarity ?? current.rarity,
       rarityConfirmed: false,
     }));
@@ -392,6 +515,7 @@ export function SessionWorkspace({ sessionId }: { sessionId: number }) {
   const pricedAmount = selectedItem ? formatSnapshotAmount(selectedItem) : null;
   const candidateArtUrl = croppedCardArtUrl(form.serialNumber, form.cardImageUrl);
   const artUrl = candidateArtUrl === failedArtUrl ? null : candidateArtUrl;
+  const palette = cardFramePalette(form.frameType, form.cardType);
   const cardTextStyle = {
     fontFamily: '"Times New Roman", Georgia, serif',
   };
@@ -403,6 +527,7 @@ export function SessionWorkspace({ sessionId }: { sessionId: number }) {
       Math.min(21, 350 / cardNameLength),
     )}px`,
     fontStretch: "condensed",
+    color: palette.text,
   };
 
   return (
@@ -505,10 +630,22 @@ export function SessionWorkspace({ sessionId }: { sessionId: number }) {
           <div className="grid gap-8 xl:grid-cols-[minmax(330px,450px)_minmax(0,1fr)] xl:items-start">
             <section aria-label="Card-shaped Session Item Editor">
               <div className="mx-auto aspect-[59/86] w-full max-w-[405px] rounded-[7px] border-[5px] border-[#273342] bg-[#273342] p-[2.1%] shadow-[0_24px_60px_rgba(15,23,42,0.22)]">
-                <div className="grid h-full grid-rows-[8%_56%_5%_22%_4%] gap-[1%] rounded-[2px] border border-[#6f432b] bg-[radial-gradient(circle_at_24%_16%,rgba(255,231,169,0.72)_0,rgba(255,231,169,0)_24%),radial-gradient(circle_at_74%_34%,rgba(106,58,35,0.24)_0,rgba(106,58,35,0)_28%),linear-gradient(135deg,#bf7650_0%,#e1a46b_35%,#a85f3d_68%,#d8915e_100%)] p-[3.2%] shadow-inner">
-                  <div className="mx-auto flex w-[88%] min-w-0 items-center overflow-hidden border-[2px] border-[#8a5737] bg-[linear-gradient(90deg,rgba(255,229,164,0.55),rgba(118,62,39,0.18),rgba(255,235,184,0.42))] px-2 shadow-[inset_0_1px_3px_rgba(255,255,255,0.55),inset_0_-2px_4px_rgba(61,32,19,0.26)]">
+                <div
+                  className="grid h-full grid-rows-[8%_56%_5%_22%_4%] gap-[1%] rounded-[2px] border p-[3.2%] shadow-inner"
+                  style={{
+                    background: palette.background,
+                    borderColor: palette.border,
+                  }}
+                >
+                  <div
+                    className="mx-auto flex w-[88%] min-w-0 items-center overflow-hidden border-[2px] px-2 shadow-[inset_0_1px_3px_rgba(255,255,255,0.55),inset_0_-2px_4px_rgba(61,32,19,0.26)]"
+                    style={{
+                      background: palette.titleBackground,
+                      borderColor: palette.titleBorder,
+                    }}
+                  >
                     <Input
-                      className="h-full min-w-0 border-0 bg-transparent px-0 py-0 font-normal uppercase leading-none tracking-normal text-[#1f130c] shadow-none placeholder:text-[#6f472d]/70 focus-visible:ring-0"
+                      className="h-full min-w-0 border-0 bg-transparent px-0 py-0 font-normal uppercase leading-none tracking-normal shadow-none placeholder:text-[#6f472d]/70 focus-visible:ring-0"
                       style={cardNameStyle}
                       aria-label="Card name"
                       value={form.cardName}
@@ -554,8 +691,8 @@ export function SessionWorkspace({ sessionId }: { sessionId: number }) {
                       }
                     >
                       <SelectTrigger
-                        className="h-6 w-full border-0 bg-transparent px-0 py-0 text-[14px] font-normal leading-none text-[#24160d] shadow-none focus-visible:ring-0 [&>svg]:hidden"
-                        style={cardTextStyle}
+                        className="h-6 w-full border-0 bg-transparent px-0 py-0 text-[14px] font-normal leading-none shadow-none focus-visible:ring-0 [&>svg]:hidden"
+                        style={{ ...cardTextStyle, color: palette.text }}
                         aria-label="Edition"
                       >
                         <SelectValue />
@@ -569,8 +706,8 @@ export function SessionWorkspace({ sessionId }: { sessionId: number }) {
                       </SelectContent>
                     </Select>
                     <Input
-                      className="h-6 border-0 bg-transparent px-0 py-0 text-right text-[14px] font-normal leading-none text-[#24160d] shadow-none placeholder:text-[#6f472d]/70 focus-visible:ring-0"
-                      style={cardTextStyle}
+                      className="h-6 border-0 bg-transparent px-0 py-0 text-right text-[14px] font-normal leading-none shadow-none placeholder:text-[#6f472d]/70 focus-visible:ring-0"
+                      style={{ ...cardTextStyle, color: palette.text }}
                       aria-label="Set Code"
                       value={form.setCode}
                       onChange={(event) =>
@@ -580,12 +717,18 @@ export function SessionWorkspace({ sessionId }: { sessionId: number }) {
                     />
                   </div>
 
-                  <div className="mx-auto w-[88%] border-[2px] border-[#8c4935] bg-[#f4ead2] shadow-[inset_0_0_0_1px_rgba(255,255,255,0.72),0_1px_3px_rgba(50,24,12,0.24)]" />
+                  <div
+                    className="mx-auto w-[88%] border-[2px] shadow-[inset_0_0_0_1px_rgba(255,255,255,0.72),0_1px_3px_rgba(50,24,12,0.24)]"
+                    style={{
+                      backgroundColor: palette.effectBackground,
+                      borderColor: palette.effectBorder,
+                    }}
+                  />
 
                   <div className="mx-auto grid w-[88%] grid-cols-[112px_1fr] items-end gap-2">
                     <Input
-                      className="h-6 border-0 bg-transparent px-0 py-0 text-[15px] font-normal leading-none text-[#1f130c] shadow-none placeholder:text-[#6f472d]/70 focus-visible:ring-0"
-                      style={cardTextStyle}
+                      className="h-6 border-0 bg-transparent px-0 py-0 text-[15px] font-normal leading-none shadow-none placeholder:text-[#6f472d]/70 focus-visible:ring-0"
+                      style={{ ...cardTextStyle, color: palette.text }}
                       aria-label="Serial Number"
                       value={form.serialNumber}
                       onChange={(event) =>
@@ -595,7 +738,7 @@ export function SessionWorkspace({ sessionId }: { sessionId: number }) {
                     />
                     <div
                       className="whitespace-nowrap text-right text-[11px] font-normal leading-none text-[#3f2a1c]"
-                      style={cardTextStyle}
+                      style={{ ...cardTextStyle, color: palette.text }}
                     >
                       ©1996 KAZUKI TAKAHASHI
                     </div>

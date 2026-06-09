@@ -419,6 +419,8 @@ function serializeSessionItem(
   item: typeof sessionItems.$inferSelect,
   latestSnapshot: PriceSnapshot | null = null,
   cardImageUrl: string | null = null,
+  cardType: string | null = null,
+  frameType: string | null = null,
 ) {
   const reviewReason = reviewReasonFor(item);
 
@@ -426,6 +428,8 @@ function serializeSessionItem(
     ...item,
     serialNumber: item.passcode,
     cardImageUrl,
+    cardType,
+    frameType,
     reviewReason,
     reviewStatus: reviewReason ? ("requires_review" as const) : ("success" as const),
     latestPriceSnapshot: serializePriceSnapshot(latestSnapshot),
@@ -617,6 +621,8 @@ export const appRouter = router({
           .select({
             item: sessionItems,
             cardImageUrl: cardMetadataCards.imageUrl,
+            cardType: cardMetadataCards.cardType,
+            frameType: cardMetadataCards.frameType,
           })
           .from(sessionItems)
           .leftJoin(
@@ -645,6 +651,8 @@ export const appRouter = router({
             row.item,
             latestSnapshots.get(row.item.id) ?? null,
             row.cardImageUrl,
+            row.cardType,
+            row.frameType,
           ),
         );
       }),
