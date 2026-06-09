@@ -51,6 +51,7 @@ import {
 type RouterOutputs = inferRouterOutputs<AppRouter>;
 type Session = RouterOutputs["sessions"]["list"][number];
 type Summary = RouterOutputs["sessions"]["summary"];
+type Collection = RouterOutputs["collection"]["list"];
 type CardMetadataResult = RouterOutputs["cards"]["searchMetadata"][number];
 type SessionItem = RouterOutputs["sessions"]["items"][number];
 
@@ -117,6 +118,7 @@ function emptyManualEntryForm(): ManualEntryForm {
 export function SessionDashboard() {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [summary, setSummary] = useState<Summary | null>(null);
+  const [collection, setCollection] = useState<Collection | null>(null);
   const [includeArchived, setIncludeArchived] = useState(false);
   const [loading, setLoading] = useState(true);
   const [savingId, setSavingId] = useState<number | null>(null);
@@ -161,12 +163,14 @@ export function SessionDashboard() {
 
   const refresh = useCallback(async () => {
     setLoading(true);
-    const [nextSessions, nextSummary] = await Promise.all([
+    const [nextSessions, nextSummary, nextCollection] = await Promise.all([
       trpc.sessions.list.query({ includeArchived }),
       trpc.sessions.summary.query(),
+      trpc.collection.list.query(),
     ]);
     setSessions(nextSessions);
     setSummary(nextSummary);
+    setCollection(nextCollection);
     setLoading(false);
   }, [includeArchived, trpc]);
 
@@ -517,6 +521,17 @@ export function SessionDashboard() {
           </Card>
           <Card className="gap-2 rounded-lg p-[18px]">
             <p className="text-[13px] font-bold text-muted-foreground">
+              Collection rows
+            </p>
+            <p className="text-3xl font-extrabold leading-none">
+              {summary?.collectionRowCount ?? 0}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              {summary?.collectionItemCount ?? 0} scanned cards
+            </p>
+          </Card>
+          <Card className="gap-2 rounded-lg p-[18px]">
+            <p className="text-[13px] font-bold text-muted-foreground">
               Review queue
             </p>
             <p className="text-3xl font-extrabold leading-none">
@@ -536,6 +551,85 @@ export function SessionDashboard() {
             </p>
           </Card>
         </section>
+
+        <Card
+          className="mb-6 rounded-lg"
+          aria-labelledby="collection-title"
+        >
+          <CardHeader>
+            <div>
+              <CardTitle className="text-[17px]" id="collection-title">
+                Active collection
+              </CardTitle>
+              <CardDescription>
+                Aggregated by Printing Identity and condition from successful
+                Session Items.
+              </CardDescription>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {!collection || loading ? (
+              <div className="border-t py-8 text-muted-foreground">
+                Loading collection...
+              </div>
+            ) : collection.rows.length === 0 ? (
+              <div className="border-t py-8 text-muted-foreground">
+                No successfully scanned cards in active sessions yet.
+              </div>
+            ) : (
+              <div className="overflow-x-auto border-t">
+                <table className="w-full min-w-[760px] text-left text-sm">
+                  <thead className="text-xs uppercase text-muted-foreground">
+                    <tr className="border-b">
+                      <th className="py-3 pr-4 font-bold">Card</th>
+                      <th className="py-3 pr-4 font-bold">Printing</th>
+                      <th className="py-3 pr-4 font-bold">Condition</th>
+                      <th className="py-3 pr-4 text-right font-bold">Qty</th>
+                      <th className="py-3 pr-4 text-right font-bold">Value</th>
+                      <th className="py-3 font-bold">Provenance</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {collection.rows.slice(0, 8).map((row) => (
+                      <tr className="border-b last:border-b-0" key={row.key}>
+                        <td className="py-3 pr-4">
+                          <p className="font-semibold">{row.cardName}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {row.rarity} · {row.edition}
+                          </p>
+                        </td>
+                        <td className="py-3 pr-4 text-muted-foreground">
+                          <p>{row.setCode}</p>
+                          <p className="text-xs">Serial {row.serialNumber}</p>
+                        </td>
+                        <td className="py-3 pr-4">{row.condition}</td>
+                        <td className="py-3 pr-4 text-right font-semibold">
+                          {row.quantity}
+                        </td>
+                        <td className="py-3 pr-4 text-right font-semibold">
+                          {row.estimatedValue}
+                        </td>
+                        <td className="py-3 text-muted-foreground">
+                          {row.provenance
+                            .map(
+                              (entry) =>
+                                `${entry.sessionName} (${entry.quantity})`,
+                            )
+                            .join(", ")}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                {collection.rows.length > 8 ? (
+                  <p className="py-3 text-sm text-muted-foreground">
+                    Showing 8 of {collection.rows.length} collection rows.
+                  </p>
+                ) : null}
+              </div>
+            )}
+          </CardContent>
+        </Card>
 
         <Card
           className="mb-6 rounded-lg"

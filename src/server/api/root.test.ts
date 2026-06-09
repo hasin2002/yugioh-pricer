@@ -708,6 +708,161 @@ describe("appRouter", () => {
     }
   });
 
+  it("derives active collection rows from successful session items with provenance", async () => {
+    const { caller, db, close } = createTestCaller();
+
+    try {
+      const [firstSession, secondSession, archivedSession] = await db
+        .insert(schema.pricingSessions)
+        .values([
+          { name: "Binder One", joinCode: "BINDER01" },
+          { name: "Binder Two", joinCode: "BINDER02" },
+          {
+            name: "Archived Test",
+            joinCode: "ARCHIVE02",
+            archivedAt: new Date(),
+          },
+        ])
+        .returning();
+      const now = new Date();
+      const insertedItems = await db
+        .insert(schema.sessionItems)
+        .values([
+          {
+            sessionId: firstSession.id,
+            entrySource: "manual",
+            cardName: "Dark Magician",
+            setCode: "LOB-005",
+            passcode: "46986414",
+            rarity: "Ultra Rare",
+            rarityConfirmedAt: now,
+            printingIdentityTrusted: true,
+            edition: "1st Edition",
+            language: "English",
+            condition: "Near Mint",
+            quantity: 2,
+          },
+          {
+            sessionId: secondSession.id,
+            entrySource: "manual",
+            cardName: "Dark Magician",
+            setCode: "LOB-005",
+            passcode: "46986414",
+            rarity: "Ultra Rare",
+            rarityConfirmedAt: now,
+            printingIdentityTrusted: true,
+            edition: "1st Edition",
+            language: "English",
+            condition: "Near Mint",
+            quantity: 1,
+          },
+          {
+            sessionId: secondSession.id,
+            entrySource: "manual",
+            cardName: "Dark Magician",
+            setCode: "LOB-005",
+            passcode: "46986414",
+            rarity: "Ultra Rare",
+            rarityConfirmedAt: now,
+            printingIdentityTrusted: true,
+            edition: "1st Edition",
+            language: "English",
+            condition: "Played",
+            quantity: 4,
+          },
+          {
+            sessionId: firstSession.id,
+            entrySource: "manual",
+            cardName: "Blue-Eyes White Dragon",
+            setCode: "SDK-001",
+            passcode: "89631139",
+            rarity: "Ultra Rare",
+            printingIdentityTrusted: true,
+            edition: "1st Edition",
+            language: "English",
+            condition: "Mint",
+            quantity: 3,
+          },
+          {
+            sessionId: archivedSession.id,
+            entrySource: "manual",
+            cardName: "Red-Eyes B. Dragon",
+            setCode: "LOB-070",
+            passcode: "74677422",
+            rarity: "Ultra Rare",
+            rarityConfirmedAt: now,
+            printingIdentityTrusted: true,
+            edition: "1st Edition",
+            language: "English",
+            condition: "Mint",
+            quantity: 5,
+          },
+        ])
+        .returning();
+
+      await db.insert(schema.priceSnapshots).values(
+        insertedItems.map((item) => ({
+          sessionItemId: item.id,
+          status: "priced",
+          observedAmount: item.cardName === "Red-Eyes B. Dragon" ? "7.00" : "5.00",
+          source: "ygoprodeck.card_sets.set_price",
+          currency: "USD",
+          observedAt: now,
+        })),
+      );
+
+      const collection = await caller.collection.list();
+      const summary = await caller.sessions.summary();
+      const archivedWorkspace = await caller.sessions.get({
+        id: archivedSession.id,
+      });
+
+      expect(collection.collectionEstimatedValue).toBe("$35.00");
+      expect(collection.collectionRowCount).toBe(2);
+      expect(collection.collectionItemCount).toBe(7);
+      expect(summary.collectionEstimatedValue).toBe("$35.00");
+      expect(summary.collectionRowCount).toBe(2);
+      expect(summary.collectionItemCount).toBe(7);
+      expect(archivedWorkspace?.sessionEstimatedValue).toBe("$35.00");
+      expect(collection.rows).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            cardName: "Dark Magician",
+            condition: "Near Mint",
+            quantity: 3,
+            estimatedValue: "$15.00",
+            provenance: expect.arrayContaining([
+              expect.objectContaining({
+                sessionId: firstSession.id,
+                sessionName: "Binder One",
+                quantity: 2,
+              }),
+              expect.objectContaining({
+                sessionId: secondSession.id,
+                sessionName: "Binder Two",
+                quantity: 1,
+              }),
+            ]),
+          }),
+          expect.objectContaining({
+            cardName: "Dark Magician",
+            condition: "Played",
+            quantity: 4,
+            estimatedValue: "$20.00",
+          }),
+        ]),
+      );
+      expect(
+        collection.rows.some((row) => row.cardName === "Blue-Eyes White Dragon"),
+      ).toBe(false);
+      expect(
+        collection.rows.some((row) => row.cardName === "Red-Eyes B. Dragon"),
+      ).toBe(false);
+    } finally {
+      close();
+    }
+  });
+
   it("excludes archived sessions from default lists and summary counts", async () => {
     const { caller, db, close } = createTestCaller();
 
