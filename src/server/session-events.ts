@@ -23,30 +23,36 @@ type SessionEventsServer = {
   close: () => Promise<void>;
 };
 
+type SessionEventsGlobalStore = {
+  listeners: Set<SessionEventListener>;
+  serverRuntime: SessionEventsServer | null;
+  serverStartup: Promise<SessionEventsServer> | null;
+};
+
 const AUTO_ASSIGNED_SESSION_EVENTS_PORT = 0;
+const SESSION_EVENTS_GLOBAL_KEY = Symbol.for("yugioh-pricer.session-events");
 
 class SessionEventBus {
-  private readonly listeners = new Set<SessionEventListener>();
-
   subscribe(listener: SessionEventListener) {
-    this.listeners.add(listener);
+    const store = sessionEventsStore();
+
+    store.listeners.add(listener);
 
     return () => {
-      this.listeners.delete(listener);
+      store.listeners.delete(listener);
     };
   }
 
   publish(event: SessionEvent) {
-    for (const listener of this.listeners) {
+    const store = sessionEventsStore();
+
+    for (const listener of store.listeners) {
       listener(event);
     }
   }
 }
 
 export const sessionEventBus = new SessionEventBus();
-
-let serverRuntime: SessionEventsServer | null = null;
-let serverStartup: Promise<SessionEventsServer> | null = null;
 
 export function publishSessionEvent(input: {
   sessionId: number;
@@ -146,22 +152,24 @@ export function createSessionEventsServer(options: {
 }
 
 export async function ensureSessionEventsServer() {
-  if (serverRuntime) {
-    return serverRuntime;
+  const store = sessionEventsStore();
+
+  if (store.serverRuntime) {
+    return store.serverRuntime;
   }
 
-  if (!serverStartup) {
-    serverStartup = createSessionEventsServer({
+  if (!store.serverStartup) {
+    store.serverStartup = createSessionEventsServer({
       port:
         Number(process.env.SESSION_EVENTS_WS_PORT) ||
         AUTO_ASSIGNED_SESSION_EVENTS_PORT,
     }).then((server) => {
-      serverRuntime = server;
+      store.serverRuntime = server;
       return server;
     });
   }
 
-  return serverStartup;
+  return store.serverStartup;
 }
 
 export async function sessionEventsUrlForRequest(request: Request) {
@@ -180,4 +188,18 @@ const websocketSessionIds = new WeakMap<WebSocket, number>();
 
 function socketSessionId(socket: WebSocket) {
   return websocketSessionIds.get(socket);
+}
+
+function sessionEventsStore() {
+  const globalStore = globalThis as typeof globalThis & {
+    [SESSION_EVENTS_GLOBAL_KEY]?: SessionEventsGlobalStore;
+  };
+
+  globalStore[SESSION_EVENTS_GLOBAL_KEY] ??= {
+    listeners: new Set<SessionEventListener>(),
+    serverRuntime: null,
+    serverStartup: null,
+  };
+
+  return globalStore[SESSION_EVENTS_GLOBAL_KEY];
 }
