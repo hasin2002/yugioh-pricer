@@ -41,6 +41,11 @@ type RouterOutputs = inferRouterOutputs<AppRouter>;
 type Session = NonNullable<RouterOutputs["sessions"]["get"]>;
 type SessionItem = RouterOutputs["sessions"]["items"][number];
 type CardMetadataResult = RouterOutputs["cards"]["searchMetadata"][number];
+type SessionEvent = {
+  sessionId: number;
+  type: string;
+  occurredAt: string;
+};
 
 type EditorForm = {
   cardName: string;
@@ -160,6 +165,9 @@ export function SessionWorkspace({ sessionId }: { sessionId: number }) {
   const [suggestionsOpen, setSuggestionsOpen] = useState(false);
   const [raritySuggestionsOpen, setRaritySuggestionsOpen] = useState(false);
   const [failedArtUrl, setFailedArtUrl] = useState<string | null>(null);
+  const [liveStatus, setLiveStatus] = useState<
+    "connecting" | "connected" | "reconnecting" | "unavailable"
+  >("connecting");
   const searchRequestRef = useRef(0);
 
   const trpc = useMemo(
@@ -210,6 +218,73 @@ export function SessionWorkspace({ sessionId }: { sessionId: number }) {
   useEffect(() => {
     void loadWorkspace();
   }, [loadWorkspace]);
+
+  useEffect(() => {
+    let cancelled = false;
+    let socket: WebSocket | null = null;
+    let reconnectTimeout: number | null = null;
+
+    function scheduleReconnect() {
+      if (cancelled) {
+        return;
+      }
+
+      setLiveStatus("reconnecting");
+      reconnectTimeout = window.setTimeout(() => {
+        void connect();
+      }, 1500);
+    }
+
+    async function connect() {
+      try {
+        const response = await fetch("/api/session-events", {
+          cache: "no-store",
+        });
+        const body = (await response.json()) as { url: string };
+
+        if (cancelled) {
+          return;
+        }
+
+        const url = new URL(body.url);
+        url.searchParams.set("sessionId", String(sessionId));
+        socket = new WebSocket(url);
+
+        socket.addEventListener("open", () => {
+          setLiveStatus("connected");
+          void loadWorkspace();
+        });
+
+        socket.addEventListener("message", (event) => {
+          const sessionEvent = JSON.parse(String(event.data)) as SessionEvent;
+
+          if (sessionEvent.sessionId === sessionId) {
+            void loadWorkspace();
+          }
+        });
+
+        socket.addEventListener("close", scheduleReconnect);
+        socket.addEventListener("error", () => {
+          setLiveStatus("unavailable");
+          socket?.close();
+        });
+      } catch {
+        setLiveStatus("unavailable");
+        scheduleReconnect();
+      }
+    }
+
+    setLiveStatus("connecting");
+    void connect();
+
+    return () => {
+      cancelled = true;
+      if (reconnectTimeout !== null) {
+        window.clearTimeout(reconnectTimeout);
+      }
+      socket?.close();
+    };
+  }, [loadWorkspace, sessionId]);
 
   useEffect(() => {
     setForm(selectedItem ? formForItem(selectedItem) : emptyEditorForm());
@@ -475,6 +550,17 @@ export function SessionWorkspace({ sessionId }: { sessionId: number }) {
                 {session.archivedAt ? (
                   <Badge variant="secondary">Archived</Badge>
                 ) : null}
+                <Badge
+                  variant={liveStatus === "connected" ? "secondary" : "outline"}
+                >
+                  {liveStatus === "connected"
+                    ? "Live"
+                    : liveStatus === "reconnecting"
+                      ? "Reconnecting"
+                      : liveStatus === "unavailable"
+                        ? "Live unavailable"
+                        : "Connecting"}
+                </Badge>
               </div>
               <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
                 <span>{session.sessionEstimatedValue} estimated</span>
