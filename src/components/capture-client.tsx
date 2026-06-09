@@ -21,6 +21,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { captureFrameQuality } from "@/lib/capture-quality";
 
 type RouterOutputs = inferRouterOutputs<AppRouter>;
 type JoinedSession = NonNullable<
@@ -40,6 +41,7 @@ type CaptureState =
   | "error";
 type CandidateFrame = {
   blob: Blob;
+  cardLike: boolean;
   signature: string;
   brightness: number;
 };
@@ -205,67 +207,94 @@ export function CaptureClient() {
     [clientId, joinCode, resetDetection],
   );
 
-  const captureBurst = useCallback(async () => {
-    if (burstInFlightRef.current) {
-      return;
-    }
-
-    burstInFlightRef.current = true;
-
-    try {
-      const frames: CandidateFrame[] = [];
-
-      for (let index = 0; index < CAPTURE_BURST_FRAME_COUNT; index += 1) {
-        const frame = await captureCandidateFrame(videoRef.current, canvasRef.current);
-
-        if (frame) {
-          frames.push(frame);
-        }
-
-        if (index < CAPTURE_BURST_FRAME_COUNT - 1) {
-          await wait(BURST_FRAME_INTERVAL_MS);
-        }
-      }
-
-      if (frames.length !== CAPTURE_BURST_FRAME_COUNT) {
-        setCaptureState("needs_review");
-        setMessage("The camera missed a frame. Hold steady for the next burst.");
-        window.setTimeout(() => {
-          burstInFlightRef.current = false;
-          resetDetection();
-          setCaptureState("detecting");
-          setMessage("Retrying with the next four-frame burst.");
-        }, 1000);
+  const captureBurst = useCallback(
+    async (options: { requireCardLike: boolean }) => {
+      if (burstInFlightRef.current) {
         return;
       }
 
-      const usableFrames = frames.filter(
-        (frame) => frame.brightness >= MIN_USABLE_BRIGHTNESS,
-      );
+      burstInFlightRef.current = true;
 
-      if (usableFrames.length === 0) {
-        setCaptureState("needs_review");
-        setMessage("No usable frames captured. Hold steady for the next burst.");
-        window.setTimeout(() => {
-          burstInFlightRef.current = false;
-          resetDetection();
-          setCaptureState("detecting");
-          setMessage("Retrying with the next four-frame burst.");
-        }, 1000);
-        return;
+      try {
+        const frames: CandidateFrame[] = [];
+
+        for (let index = 0; index < CAPTURE_BURST_FRAME_COUNT; index += 1) {
+          const frame = await captureCandidateFrame(
+            videoRef.current,
+            canvasRef.current,
+          );
+
+          if (frame) {
+            frames.push(frame);
+          }
+
+          if (index < CAPTURE_BURST_FRAME_COUNT - 1) {
+            await wait(BURST_FRAME_INTERVAL_MS);
+          }
+        }
+
+        if (frames.length !== CAPTURE_BURST_FRAME_COUNT) {
+          setCaptureState("needs_review");
+          setMessage("The camera missed a frame. Hold steady for the next burst.");
+          window.setTimeout(() => {
+            burstInFlightRef.current = false;
+            resetDetection();
+            setCaptureState("detecting");
+            setMessage("Retrying with the next four-frame burst.");
+          }, 1000);
+          return;
+        }
+
+        const usableFrames = frames.filter(
+          (frame) => frame.brightness >= MIN_USABLE_BRIGHTNESS,
+        );
+
+        if (usableFrames.length === 0) {
+          setCaptureState("needs_review");
+          setMessage(
+            "No usable frames captured. Align the card inside the outline.",
+          );
+          window.setTimeout(() => {
+            burstInFlightRef.current = false;
+            resetDetection();
+            setCaptureState("detecting");
+            setMessage("Retrying with the next four-frame burst.");
+          }, 1000);
+          return;
+        }
+
+        const cardLikeFrameCount = frames.filter((frame) => frame.cardLike).length;
+
+        if (
+          options.requireCardLike &&
+          cardLikeFrameCount < CAPTURE_BURST_FRAME_COUNT - 1
+        ) {
+          setCaptureState("needs_review");
+          setMessage(
+            "Card moved out of the outline. Hold steady for the next burst.",
+          );
+          window.setTimeout(() => {
+            burstInFlightRef.current = false;
+            resetDetection();
+            setCaptureState("detecting");
+            setMessage("Retrying with the next four-frame burst.");
+          }, 1000);
+          return;
+        }
+
+        await uploadBurst(frames);
+      } catch (error) {
+        burstInFlightRef.current = false;
+        setCaptureState("error");
+        setMessage(
+          error instanceof Error
+            ? error.message
+            : "The camera stream is not ready yet. Wait for the preview and try again.",
+        );
       }
-
-      await uploadBurst(frames);
-    } catch (error) {
-      burstInFlightRef.current = false;
-      setCaptureState("error");
-      setMessage(
-        error instanceof Error
-          ? error.message
-          : "The camera stream is not ready yet. Wait for the preview and try again.",
-      );
-    }
-  }, [resetDetection, uploadBurst]);
+    },
+    [resetDetection, uploadBurst],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -359,6 +388,13 @@ export function CaptureClient() {
         return;
       }
 
+      if (!frame.cardLike) {
+        resetDetection();
+        setCaptureState("detecting");
+        setMessage("Align one card inside the outline before auto-capture.");
+        return;
+      }
+
       const previousSignature = lastSignatureRef.current;
       const movement = previousSignature
         ? signatureDistance(previousSignature, frame.signature)
@@ -375,7 +411,7 @@ export function CaptureClient() {
         setCaptureState("hold_steady");
         setMessage("Hold steady. Capturing four candidate frames.");
         window.clearInterval(interval);
-        await captureBurst();
+        await captureBurst({ requireCardLike: true });
         return;
       }
 
@@ -448,12 +484,16 @@ export function CaptureClient() {
   return (
     <section className="min-h-screen bg-muted/40 p-4 text-foreground sm:p-6">
       <div className="mx-auto grid max-w-5xl gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
-        <div className="overflow-hidden rounded-lg border bg-black">
+        <div className="relative overflow-hidden rounded-lg border bg-black">
           <video
             ref={videoRef}
             className="aspect-[3/4] w-full bg-black object-cover sm:aspect-video"
             muted
             playsInline
+          />
+          <div
+            className="pointer-events-none absolute left-1/2 top-1/2 aspect-[59/86] h-[72%] max-h-[86%] max-w-[78%] -translate-x-1/2 -translate-y-1/2 rounded-md border-2 border-white/90 shadow-[0_0_0_999px_rgba(0,0,0,0.18)]"
+            aria-hidden="true"
           />
           <canvas ref={canvasRef} className="hidden" />
         </div>
@@ -552,7 +592,7 @@ export function CaptureClient() {
                   className="h-11"
                   type="button"
                   variant="outline"
-                  onClick={() => void captureBurst()}
+                  onClick={() => void captureBurst({ requireCardLike: false })}
                   disabled={burstInFlightRef.current}
                 >
                   <Camera className="mr-2 h-4 w-4" aria-hidden="true" />
@@ -645,7 +685,12 @@ async function captureCandidateFrame(
 
   context.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-  const metrics = frameMetrics(context, canvas.width, canvas.height);
+  const imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+  const metrics = captureFrameQuality({
+    data: imageData.data,
+    width: canvas.width,
+    height: canvas.height,
+  });
   const blob = await canvasBlob(canvas);
 
   if (!blob) {
@@ -654,37 +699,10 @@ async function captureCandidateFrame(
 
   return {
     blob,
+    cardLike: metrics.cardLike,
     signature: metrics.signature,
     brightness: metrics.brightness,
   };
-}
-
-function frameMetrics(
-  context: CanvasRenderingContext2D,
-  width: number,
-  height: number,
-) {
-  const sampleSize = 8;
-  const stepX = Math.max(1, Math.floor(width / sampleSize));
-  const stepY = Math.max(1, Math.floor(height / sampleSize));
-  const values: number[] = [];
-  let total = 0;
-
-  for (let y = Math.floor(stepY / 2); y < height; y += stepY) {
-    for (let x = Math.floor(stepX / 2); x < width; x += stepX) {
-      const [red = 0, green = 0, blue = 0] = context.getImageData(x, y, 1, 1).data;
-      const value = Math.round((red + green + blue) / 3);
-      values.push(value);
-      total += value;
-    }
-  }
-
-  const brightness = values.length > 0 ? total / values.length : 0;
-  const signature = values
-    .map((value) => Math.round(value / 16).toString(16))
-    .join("");
-
-  return { brightness, signature };
 }
 
 function signatureDistance(left: string, right: string) {
