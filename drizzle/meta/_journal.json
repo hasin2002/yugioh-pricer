@@ -57,6 +57,13 @@
       "when": 1780252829566,
       "tag": "0007_normal_gorgon",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1781015373194,
+      "tag": "0008_faulty_wallflower",
+      "breakpoints": true
     }
   ]
 }
