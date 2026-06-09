@@ -168,6 +168,66 @@ describe("captureFrameQuality", () => {
     expect(quality.cardLike).toBe(false);
   });
 
+  it("rejects a card that is only partly entering the capture guide", () => {
+    const width = 240;
+    const height = 360;
+    const data = pixels(width, height, 95);
+    const guide = captureGuideRect(width, height);
+    const cardWidth = guide.width * 0.72;
+    const cardHeight = cardWidth / (59 / 86);
+
+    drawCard(data, width, {
+      left: guide.left - cardWidth * 0.42,
+      top: guide.top + guide.height * 0.2,
+      right: guide.left + cardWidth * 0.58,
+      bottom: guide.top + guide.height * 0.2 + cardHeight,
+      width: cardWidth,
+      height: cardHeight,
+    });
+
+    const quality = captureFrameQuality({ data, width, height });
+
+    expect(quality.cardLike).toBe(false);
+  });
+
+  it("rejects a cluttered mat and notebook scene without a full card", () => {
+    const width = 240;
+    const height = 360;
+    const data = pixels(width, height, 92);
+    const guide = captureGuideRect(width, height);
+
+    for (let x = 0; x < width; x += 18) {
+      fillRect(data, width, x, 0, x + 2, height, 188);
+    }
+
+    for (let y = 0; y < height; y += 18) {
+      fillRect(data, width, 0, y, width, y + 2, 188);
+    }
+
+    fillRect(
+      data,
+      width,
+      guide.left + guide.width * 0.2,
+      guide.top + guide.height * 0.08,
+      guide.right + guide.width * 0.24,
+      guide.top + guide.height * 0.28,
+      225,
+    );
+
+    for (let row = 0; row < 6; row += 1) {
+      const y = guide.top + guide.height * 0.12 + row * 8;
+      fillRect(data, width, guide.left + 52, y, guide.right + 26, y + 2, 145);
+    }
+
+    for (let offset = -36; offset < width; offset += 1) {
+      fillRect(data, width, offset, offset + 170, offset + 5, offset + 175, 45);
+    }
+
+    const quality = captureFrameQuality({ data, width, height });
+
+    expect(quality.cardLike).toBe(false);
+  });
+
   it("accepts a centered portrait card shape inside the capture guide", () => {
     const width = 240;
     const height = 360;

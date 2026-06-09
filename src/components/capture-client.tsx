@@ -22,6 +22,10 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { captureFrameQuality } from "@/lib/capture-quality";
+import {
+  isCapturedSceneResetFrame,
+  signatureDistance,
+} from "@/lib/capture-signature";
 
 type RouterOutputs = inferRouterOutputs<AppRouter>;
 type JoinedSession = NonNullable<
@@ -58,19 +62,22 @@ type BurstUploadResponse = {
 const SECURE_CONTEXT_ERROR =
   "Camera access requires HTTPS. Open this page through your Cloudflare Tunnel URL on the iPhone.";
 const CAPTURE_BURST_FRAME_COUNT = 4;
+const AUTO_CAPTURE_CARDLIKE_FRAME_TARGET = CAPTURE_BURST_FRAME_COUNT;
 const DETECTION_INTERVAL_MS = 300;
 const BURST_FRAME_INTERVAL_MS = 180;
 const STABLE_FRAME_TARGET = 2;
 const SIGNATURE_MOVEMENT_THRESHOLD = 64;
+const CAPTURED_SCENE_CHANGE_THRESHOLD = 72;
 const MIN_USABLE_BRIGHTNESS = 18;
-const REMOVAL_FRAME_TARGET = 3;
+const CAPTURED_RESET_FRAME_TARGET = 3;
 
 export function CaptureClient() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const lastSignatureRef = useRef<string | null>(null);
-  const removalFrameCountRef = useRef(0);
+  const capturedSignatureRef = useRef<string | null>(null);
+  const capturedResetFrameCountRef = useRef(0);
   const stableFrameCountRef = useRef(0);
   const burstInFlightRef = useRef(false);
   const [captureState, setCaptureState] = useState<CaptureState>("joining");
@@ -176,19 +183,21 @@ export function CaptureClient() {
           );
         }
 
+        capturedSignatureRef.current = representativeSignatureForFrames(frames);
+        capturedResetFrameCountRef.current = 0;
         setCapturedItem(body.item);
 
         if (body.status === "already_captured") {
           setCaptureState("already_captured");
           setMessage(
-            "Already captured. Remove the card or adjust quantity for this item.",
+            "Already captured. Remove or swap the card, or adjust quantity for this item.",
           );
           return;
         }
 
         setCaptureState("captured");
         setMessage(
-          "Captured. Remove this card and scanning will resume automatically.",
+          "Captured. Remove or swap this card and scanning will resume automatically.",
         );
       } catch (error) {
         setCaptureState("needs_review");
@@ -269,7 +278,7 @@ export function CaptureClient() {
 
         if (
           options.requireCardLike &&
-          cardLikeFrameCount < CAPTURE_BURST_FRAME_COUNT - 1
+          cardLikeFrameCount < AUTO_CAPTURE_CARDLIKE_FRAME_TARGET
         ) {
           setCaptureState("needs_review");
           setMessage(
@@ -426,7 +435,7 @@ export function CaptureClient() {
 
   useEffect(() => {
     if (captureState !== "captured" && captureState !== "already_captured") {
-      removalFrameCountRef.current = 0;
+      capturedResetFrameCountRef.current = 0;
       return;
     }
 
@@ -437,13 +446,19 @@ export function CaptureClient() {
     async function watchForCardRemoval() {
       const frame = await captureCandidateFrame(videoRef.current, canvasRef.current);
 
-      if (!frame || !frame.cardLike) {
-        removalFrameCountRef.current += 1;
+      if (
+        isCapturedSceneResetFrame(
+          frame,
+          capturedSignatureRef.current,
+          CAPTURED_SCENE_CHANGE_THRESHOLD,
+        )
+      ) {
+        capturedResetFrameCountRef.current += 1;
       } else {
-        removalFrameCountRef.current = 0;
+        capturedResetFrameCountRef.current = 0;
       }
 
-      if (removalFrameCountRef.current >= REMOVAL_FRAME_TARGET) {
+      if (capturedResetFrameCountRef.current >= CAPTURED_RESET_FRAME_TARGET) {
         window.clearInterval(interval);
         resumeDetection();
       }
@@ -506,6 +521,8 @@ export function CaptureClient() {
 
   function resumeDetection() {
     resetDetection();
+    capturedSignatureRef.current = null;
+    capturedResetFrameCountRef.current = 0;
     setCapturedItem(null);
     setCaptureState("detecting");
     setMessage("Detecting the next card.");
@@ -735,19 +752,12 @@ async function captureCandidateFrame(
   };
 }
 
-function signatureDistance(left: string, right: string) {
-  const length = Math.min(left.length, right.length);
-  let distance = Math.abs(left.length - right.length);
-
-  for (let index = 0; index < length; index += 1) {
-    distance += Math.abs(parseInt(left[index]!, 16) - parseInt(right[index]!, 16));
-  }
-
-  return distance;
-}
-
 function fingerprintForFrames(frames: CandidateFrame[]) {
   return frames.map((frame) => frame.signature).join(".");
+}
+
+function representativeSignatureForFrames(frames: CandidateFrame[]) {
+  return frames[Math.floor(frames.length / 2)]?.signature ?? null;
 }
 
 function canvasBlob(canvas: HTMLCanvasElement) {

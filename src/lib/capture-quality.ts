@@ -24,6 +24,7 @@ const MIN_BRIGHTNESS = 18;
 const MIN_MATCHED_EDGES = 3;
 const STRUCTURE_CONTRAST_THRESHOLD = 16;
 const MIN_STRUCTURE_MATCHES = 3;
+const MIN_TEXTURE_SCORE = 18;
 
 type Rect = ReturnType<typeof captureGuideRect>;
 
@@ -66,7 +67,8 @@ export function captureFrameQuality(source: PixelSource): CaptureFrameQuality {
     cardLike:
       sample.brightness >= MIN_BRIGHTNESS &&
       matchedEdges >= MIN_MATCHED_EDGES &&
-      candidate.structureMatches >= MIN_STRUCTURE_MATCHES,
+      candidate.structureMatches >= MIN_STRUCTURE_MATCHES &&
+      textureScore >= MIN_TEXTURE_SCORE,
     edgeScore,
     matchedEdges,
     structureScore: candidate.structureScore,
@@ -136,9 +138,9 @@ function bestCardCandidate(source: PixelSource) {
 
 function candidateCardRects(width: number, height: number) {
   const guide = captureGuideRect(width, height);
-  const widthScales = [0.72, 0.82, 0.88, 0.94, 1];
-  const xShifts = [-0.08, 0, 0.08];
-  const yShifts = [-0.08, 0, 0.08];
+  const widthScales = [0.82, 0.88, 0.94, 1];
+  const xShifts = [-0.06, 0, 0.06];
+  const yShifts = [-0.06, 0, 0.06];
 
   return widthScales.flatMap((widthScale) => {
     const rectWidth = guide.width * widthScale;
