@@ -13,6 +13,7 @@ import {
 } from "@/lib/printing-options";
 import { fetchAndStorePriceSnapshot } from "@/server/cards/pricing";
 import {
+  cardMetadataCards,
   priceSnapshots,
   pricingSessions,
   sessionItems,
@@ -49,25 +50,50 @@ const cardEditionSchema = z.enum(CARD_EDITIONS);
 
 const cardConditionSchema = z.enum(CARD_CONDITIONS);
 
-const manualSessionItemInputSchema = sessionIdInputSchema.extend({
+const serialNumberInputSchema = z
+  .object({
+    passcode: z.string().trim().min(1).max(40).optional(),
+    serialNumber: z.string().trim().min(1).max(40).optional(),
+  })
+  .transform((input, ctx) => {
+    const serialNumber = input.serialNumber ?? input.passcode;
+
+    if (!serialNumber) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Serial Number is required",
+        path: ["serialNumber"],
+      });
+
+      return z.NEVER;
+    }
+
+    return {
+      passcode: serialNumber,
+      serialNumber,
+    };
+  });
+
+const manualSessionItemInputSchema = sessionIdInputSchema
+  .extend({
   cardName: z.string().trim().min(1).max(160),
   setCode: z.string().trim().min(1).max(40),
-  passcode: z.string().trim().min(1).max(40),
   rarity: z.string().trim().min(1).max(80),
   edition: cardEditionSchema.default("1st Edition"),
   language: z.string().trim().min(1).max(40).default(DEFAULT_CARD_LANGUAGE),
   condition: cardConditionSchema.default("Mint"),
   quantity: z.number().int().min(1).max(999).default(1),
-});
+})
+  .and(serialNumberInputSchema);
 
 const sessionItemIdInputSchema = z.object({
   id: z.number().int().positive(),
 });
 
-const updateSessionItemInputSchema = sessionItemIdInputSchema.extend({
+const updateSessionItemInputSchema = sessionItemIdInputSchema
+  .extend({
   cardName: z.string().trim().min(1).max(160),
   setCode: z.string().trim().min(1).max(40),
-  passcode: z.string().trim().min(1).max(40),
   rarity: z.string().trim().min(1).max(80),
   edition: cardEditionSchema,
   language: z.string().trim().min(1).max(40),
@@ -75,7 +101,8 @@ const updateSessionItemInputSchema = sessionItemIdInputSchema.extend({
   quantity: z.number().int().min(1).max(999),
   rarityConfirmed: z.boolean().default(false),
   printingIdentityTrusted: z.boolean().default(true),
-});
+})
+  .and(serialNumberInputSchema);
 
 const bulkConfirmRarityInputSchema = z.object({
   ids: z.array(z.number().int().positive()).min(1).max(100),
@@ -391,11 +418,18 @@ function pricingIssueLabel(snapshot: PriceSnapshot | null) {
 function serializeSessionItem(
   item: typeof sessionItems.$inferSelect,
   latestSnapshot: PriceSnapshot | null = null,
+  cardImageUrl: string | null = null,
+  cardType: string | null = null,
+  frameType: string | null = null,
 ) {
   const reviewReason = reviewReasonFor(item);
 
   return {
     ...item,
+    serialNumber: item.passcode,
+    cardImageUrl,
+    cardType,
+    frameType,
     reviewReason,
     reviewStatus: reviewReason ? ("requires_review" as const) : ("success" as const),
     latestPriceSnapshot: serializePriceSnapshot(latestSnapshot),
@@ -457,6 +491,24 @@ export const appRouter = router({
         return sessions.map((session) =>
           serializeSession(session, pricingSummaries.get(session.id)),
         );
+      }),
+    get: publicProcedure
+      .input(sessionIdInputSchema)
+      .query(async ({ ctx, input }) => {
+        const [session] = await ctx.db
+          .select()
+          .from(pricingSessions)
+          .where(eq(pricingSessions.id, input.id));
+
+        if (!session) {
+          return null;
+        }
+
+        const pricingSummaries = await pricingSummariesForSessions(ctx.db, [
+          session,
+        ]);
+
+        return serializeSession(session, pricingSummaries.get(session.id));
       }),
     summary: publicProcedure.query(async ({ ctx }) => {
       const [activeSessions, allSessions] = await Promise.all([
@@ -565,11 +617,21 @@ export const appRouter = router({
     items: publicProcedure
       .input(sessionIdInputSchema)
       .query(async ({ ctx, input }) => {
-        const items = await ctx.db
-          .select()
+        const itemRows = await ctx.db
+          .select({
+            item: sessionItems,
+            cardImageUrl: cardMetadataCards.imageUrl,
+            cardType: cardMetadataCards.cardType,
+            frameType: cardMetadataCards.frameType,
+          })
           .from(sessionItems)
+          .leftJoin(
+            cardMetadataCards,
+            eq(sessionItems.passcode, cardMetadataCards.passcode),
+          )
           .where(eq(sessionItems.sessionId, input.id))
           .orderBy(desc(sessionItems.createdAt));
+        const items = itemRows.map((row) => row.item);
         const snapshots =
           items.length > 0
             ? await ctx.db
@@ -584,8 +646,14 @@ export const appRouter = router({
             : [];
         const latestSnapshots = latestSnapshotsByItemId(snapshots);
 
-        return items.map((item) =>
-          serializeSessionItem(item, latestSnapshots.get(item.id) ?? null),
+        return itemRows.map((row) =>
+          serializeSessionItem(
+            row.item,
+            latestSnapshots.get(row.item.id) ?? null,
+            row.cardImageUrl,
+            row.cardType,
+            row.frameType,
+          ),
         );
       }),
     addManualItem: publicProcedure
@@ -645,6 +713,7 @@ export const appRouter = router({
         }
 
         const now = new Date();
+        const rarityChanged = existingItem.rarity !== input.rarity;
         const [item] = await ctx.db
           .update(sessionItems)
           .set({
@@ -652,7 +721,8 @@ export const appRouter = router({
             setCode: input.setCode,
             passcode: input.passcode,
             rarity: input.rarity,
-            rarityConfirmedAt: input.rarityConfirmed ? now : null,
+            rarityConfirmedAt:
+              input.rarityConfirmed && !rarityChanged ? now : null,
             printingIdentityTrusted: input.printingIdentityTrusted,
             edition: input.edition,
             language: input.language,

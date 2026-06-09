@@ -250,6 +250,7 @@ describe("appRouter", () => {
         cardName: "Dark Magician",
         setCode: "LOB-005",
         passcode: "46986414",
+        serialNumber: "46986414",
         rarity: "Ultra Rare",
         edition: "Limited Edition",
         language: "English",
@@ -271,6 +272,92 @@ describe("appRouter", () => {
       expect(summary.collectionEstimatedValue).toBe("£0.00");
     } finally {
       restoreFetch();
+      close();
+    }
+  });
+
+  it("gets one session with workspace summary and QR metadata", async () => {
+    process.env.PHONE_SAFE_HTTPS_ORIGIN = "https://capture.example.test";
+    const { caller, close } = createTestCaller();
+
+    try {
+      const session = await caller.sessions.create();
+      const workspaceSession = await caller.sessions.get({ id: session.id });
+
+      expect(workspaceSession).toMatchObject({
+        id: session.id,
+        name: session.name,
+        sessionEstimatedValue: "$0.00",
+        reviewCount: 0,
+        joinUrl: `https://capture.example.test/capture?join=${session.joinCode}`,
+        phoneSafeOriginConfigured: true,
+      });
+      expect(workspaceSession?.joinQrSvg).toContain("<svg");
+      await expect(caller.sessions.get({ id: 999 })).resolves.toBeNull();
+    } finally {
+      close();
+    }
+  });
+
+  it("accepts Serial Number as the item input name", async () => {
+    const restoreFetch = mockYgoPriceResponse({ data: [{ id: 46986414 }] });
+    const { caller, close } = createTestCaller();
+
+    try {
+      const session = await caller.sessions.create();
+      const item = await caller.sessions.addManualItem({
+        id: session.id,
+        cardName: "Dark Magician",
+        setCode: "LOB-005",
+        serialNumber: "46986414",
+        rarity: "Ultra Rare",
+      });
+
+      expect(item).toMatchObject({
+        passcode: "46986414",
+        serialNumber: "46986414",
+      });
+    } finally {
+      restoreFetch();
+      close();
+    }
+  });
+
+  it("returns card metadata art for session workspace items", async () => {
+    const { caller, db, close } = createTestCaller();
+
+    try {
+      const session = await caller.sessions.create();
+      await db.insert(schema.cardMetadataCards).values({
+        passcode: "46986414",
+        name: "Dark Magician",
+        normalizedName: "dark magician",
+        cardType: "Normal Monster",
+        frameType: "normal",
+        imageUrl: "https://images.ygoprodeck.com/images/cards_small/46986414.jpg",
+      });
+      await db.insert(schema.sessionItems).values({
+        sessionId: session.id,
+        entrySource: "manual",
+        cardName: "Dark Magician",
+        setCode: "LOB-005",
+        passcode: "46986414",
+        rarity: "Ultra Rare",
+        printingIdentityTrusted: true,
+        edition: "1st Edition",
+        language: "English",
+        condition: "Mint",
+        quantity: 1,
+      });
+
+      const [item] = await caller.sessions.items({ id: session.id });
+
+      expect(item?.cardImageUrl).toBe(
+        "https://images.ygoprodeck.com/images/cards_small/46986414.jpg",
+      );
+      expect(item?.cardType).toBe("Normal Monster");
+      expect(item?.frameType).toBe("normal");
+    } finally {
       close();
     }
   });
@@ -358,6 +445,46 @@ describe("appRouter", () => {
       const [reviewItem] = await caller.sessions.items({ id: session.id });
 
       expect(reviewItem?.reviewReason).toBe("Rarity Review");
+    } finally {
+      restoreFetch();
+      close();
+    }
+  });
+
+  it("clears Rarity Confirmation when rarity is edited", async () => {
+    const restoreFetch = mockYgoPriceResponse({
+      data: [{ id: 46986414, card_sets: [{ set_code: "LOB-005" }] }],
+    });
+    const { caller, close } = createTestCaller();
+
+    try {
+      const session = await caller.sessions.create();
+      const item = await caller.sessions.addManualItem({
+        id: session.id,
+        cardName: "Dark Magician",
+        setCode: "LOB-005",
+        serialNumber: "46986414",
+        rarity: "Ultra Rare",
+      });
+      await caller.sessions.confirmItemRarity({ id: item.id });
+
+      const updated = await caller.sessions.updateItem({
+        id: item.id,
+        cardName: "Dark Magician",
+        setCode: "LOB-005",
+        serialNumber: "46986414",
+        rarity: "Secret Rare",
+        edition: "1st Edition",
+        language: "English",
+        condition: "Mint",
+        quantity: 1,
+        printingIdentityTrusted: true,
+        rarityConfirmed: true,
+      });
+
+      expect(updated?.rarity).toBe("Secret Rare");
+      expect(updated?.rarityConfirmedAt).toBeNull();
+      expect(updated?.reviewReason).toBe("Rarity Review");
     } finally {
       restoreFetch();
       close();
