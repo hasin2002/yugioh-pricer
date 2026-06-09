@@ -15,6 +15,9 @@ import { fetchAndStorePriceSnapshot } from "@/server/cards/pricing";
 import { publishSessionEvent } from "@/server/session-events";
 import {
   cardMetadataCards,
+  bestFrames,
+  captureCandidateFrames,
+  ocrEvidence,
   priceSnapshots,
   pricingSessions,
   sessionItems,
@@ -141,6 +144,9 @@ const collectionListInputSchema = z
   });
 
 type PriceSnapshot = typeof priceSnapshots.$inferSelect;
+type BestFrame = typeof bestFrames.$inferSelect;
+type CaptureCandidateFrame = typeof captureCandidateFrames.$inferSelect;
+type OcrEvidence = typeof ocrEvidence.$inferSelect;
 
 type SessionPricingSummary = {
   sessionEstimatedValue: string;
@@ -758,12 +764,80 @@ function pricingIssueLabel(snapshot: PriceSnapshot | null) {
   return null;
 }
 
+function bestFrameUrlFor(bestFrameId: number) {
+  return `/api/capture/best-frame/${bestFrameId}`;
+}
+
+function serializeBestFrame(bestFrame: BestFrame | null) {
+  if (!bestFrame) {
+    return null;
+  }
+
+  return {
+    id: bestFrame.id,
+    url: bestFrameUrlFor(bestFrame.id),
+    storagePath: bestFrame.storagePath,
+    mimeType: bestFrame.mimeType,
+    sizeBytes: bestFrame.sizeBytes,
+    createdAt: bestFrame.createdAt.toISOString(),
+  };
+}
+
+function serializeCaptureCandidateFrame(frame: CaptureCandidateFrame) {
+  return {
+    id: frame.id,
+    position: frame.position,
+    selectedAsBest: frame.selectedAsBest,
+    mimeType: frame.mimeType,
+    sizeBytes: frame.sizeBytes,
+    cardLike: frame.cardLike,
+    brightness: frame.brightness,
+    signature: frame.signature,
+    createdAt: frame.createdAt.toISOString(),
+  };
+}
+
+function serializeOcrEvidence(evidence: OcrEvidence | null) {
+  if (!evidence) {
+    return null;
+  }
+
+  return {
+    id: evidence.id,
+    status: evidence.status,
+    rawText: evidence.rawText,
+    cardNameText: evidence.cardNameText,
+    cardNameConfidence: evidence.cardNameConfidence,
+    setCodeText: evidence.setCodeText,
+    setCodeConfidence: evidence.setCodeConfidence,
+    editionText: evidence.editionText,
+    editionConfidence: evidence.editionConfidence,
+    serialNumberText: evidence.serialNumberText,
+    serialNumberConfidence: evidence.serialNumberConfidence,
+    createdAt: evidence.createdAt.toISOString(),
+    updatedAt: evidence.updatedAt.toISOString(),
+  };
+}
+
+function serializeScanEvidence(
+  bestFrame: BestFrame | null,
+  candidateFrames: CaptureCandidateFrame[] = [],
+  evidence: OcrEvidence | null = null,
+) {
+  return {
+    bestFrame: serializeBestFrame(bestFrame),
+    candidateFrames: candidateFrames.map(serializeCaptureCandidateFrame),
+    ocrEvidence: serializeOcrEvidence(evidence),
+  };
+}
+
 function serializeSessionItem(
   item: typeof sessionItems.$inferSelect,
   latestSnapshot: PriceSnapshot | null = null,
   cardImageUrl: string | null = null,
   cardType: string | null = null,
   frameType: string | null = null,
+  scanEvidence = serializeScanEvidence(null),
 ) {
   const reviewReason = reviewReasonFor(item);
 
@@ -775,6 +849,7 @@ function serializeSessionItem(
     frameType,
     reviewReason,
     reviewStatus: reviewReason ? ("requires_review" as const) : ("success" as const),
+    scanEvidence,
     latestPriceSnapshot: serializePriceSnapshot(latestSnapshot),
     pricingIssue: pricingIssueLabel(latestSnapshot),
     rarityConfirmedAt: item.rarityConfirmedAt?.toISOString() ?? null,
@@ -998,12 +1073,14 @@ export const appRouter = router({
             cardImageUrl: cardMetadataCards.imageUrl,
             cardType: cardMetadataCards.cardType,
             frameType: cardMetadataCards.frameType,
+            bestFrame: bestFrames,
           })
           .from(sessionItems)
           .leftJoin(
             cardMetadataCards,
             eq(sessionItems.passcode, cardMetadataCards.passcode),
           )
+          .leftJoin(bestFrames, eq(sessionItems.bestFrameId, bestFrames.id))
           .where(eq(sessionItems.sessionId, input.id))
           .orderBy(desc(sessionItems.createdAt));
         const items = itemRows.map((row) => row.item);
@@ -1020,6 +1097,50 @@ export const appRouter = router({
                 )
             : [];
         const latestSnapshots = latestSnapshotsByItemId(snapshots);
+        const candidateFrameRows =
+          items.length > 0
+            ? await ctx.db
+                .select()
+                .from(captureCandidateFrames)
+                .where(
+                  inArray(
+                    captureCandidateFrames.sessionItemId,
+                    items.map((item) => item.id),
+                  ),
+                )
+            : [];
+        const ocrEvidenceRows =
+          items.length > 0
+            ? await ctx.db
+                .select()
+                .from(ocrEvidence)
+                .where(
+                  inArray(
+                    ocrEvidence.sessionItemId,
+                    items.map((item) => item.id),
+                  ),
+                )
+            : [];
+        const candidateFramesByItemId = new Map<
+          number,
+          CaptureCandidateFrame[]
+        >();
+        const ocrEvidenceByItemId = new Map<number, OcrEvidence>();
+
+        for (const candidateFrame of candidateFrameRows) {
+          const existing =
+            candidateFramesByItemId.get(candidateFrame.sessionItemId) ?? [];
+          existing.push(candidateFrame);
+          candidateFramesByItemId.set(candidateFrame.sessionItemId, existing);
+        }
+
+        for (const candidateFrames of candidateFramesByItemId.values()) {
+          candidateFrames.sort((left, right) => left.position - right.position);
+        }
+
+        for (const evidence of ocrEvidenceRows) {
+          ocrEvidenceByItemId.set(evidence.sessionItemId, evidence);
+        }
 
         return itemRows.map((row) =>
           serializeSessionItem(
@@ -1028,6 +1149,11 @@ export const appRouter = router({
             row.cardImageUrl,
             row.cardType,
             row.frameType,
+            serializeScanEvidence(
+              row.bestFrame,
+              candidateFramesByItemId.get(row.item.id) ?? [],
+              ocrEvidenceByItemId.get(row.item.id) ?? null,
+            ),
           ),
         );
       }),

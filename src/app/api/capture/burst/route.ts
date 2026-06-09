@@ -3,11 +3,18 @@ import { NextResponse } from "next/server";
 
 import {
   CaptureBurstError,
+  candidateFrameMetricsFromFormData,
   candidateFramesFromFormData,
   saveCaptureBurst,
 } from "@/server/capture/burst";
 import { db } from "@/server/db";
-import { bestFrames, pricingSessions, sessionItems } from "@/server/db/schema";
+import {
+  bestFrames,
+  captureCandidateFrames,
+  ocrEvidence,
+  pricingSessions,
+  sessionItems,
+} from "@/server/db/schema";
 import { publishSessionEvent } from "@/server/session-events";
 
 export const runtime = "nodejs";
@@ -69,7 +76,9 @@ export async function POST(request: Request) {
       });
     }
 
-    const savedBurst = await saveCaptureBurst(candidateFramesFromFormData(formData));
+    const savedBurst = await saveCaptureBurst(candidateFramesFromFormData(formData), {
+      candidateFrameMetrics: candidateFrameMetricsFromFormData(formData),
+    });
     const insertedBestFrame = db
       .insert(bestFrames)
       .values(savedBurst.bestFrame)
@@ -98,6 +107,24 @@ export async function POST(request: Request) {
       })
       .returning()
       .get();
+
+    db.insert(captureCandidateFrames)
+      .values(
+        savedBurst.candidateFrames.map((candidateFrame) => ({
+          sessionItemId: item.id,
+          ...candidateFrame,
+          createdAt: now,
+        })),
+      )
+      .run();
+    db.insert(ocrEvidence)
+      .values({
+        sessionItemId: item.id,
+        status: "pending",
+        createdAt: now,
+        updatedAt: now,
+      })
+      .run();
 
     db.update(pricingSessions)
       .set({

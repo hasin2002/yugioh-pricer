@@ -83,6 +83,36 @@ function createTestCaller() {
       updated_at integer DEFAULT (unixepoch()) NOT NULL
     );
 
+    CREATE TABLE capture_candidate_frames (
+      id integer PRIMARY KEY AUTOINCREMENT NOT NULL,
+      session_item_id integer NOT NULL REFERENCES session_items(id) ON DELETE cascade,
+      position integer NOT NULL,
+      selected_as_best integer DEFAULT 0 NOT NULL,
+      mime_type text NOT NULL,
+      size_bytes integer NOT NULL,
+      card_like integer,
+      brightness integer,
+      signature text,
+      created_at integer DEFAULT (unixepoch()) NOT NULL
+    );
+
+    CREATE TABLE ocr_evidence (
+      id integer PRIMARY KEY AUTOINCREMENT NOT NULL,
+      session_item_id integer NOT NULL REFERENCES session_items(id) ON DELETE cascade,
+      status text DEFAULT 'pending' NOT NULL,
+      raw_text text,
+      card_name_text text,
+      card_name_confidence integer,
+      set_code_text text,
+      set_code_confidence integer,
+      edition_text text,
+      edition_confidence integer,
+      serial_number_text text,
+      serial_number_confidence integer,
+      created_at integer DEFAULT (unixepoch()) NOT NULL,
+      updated_at integer DEFAULT (unixepoch()) NOT NULL
+    );
+
     CREATE TABLE price_snapshots (
       id integer PRIMARY KEY AUTOINCREMENT NOT NULL,
       session_item_id integer NOT NULL REFERENCES session_items(id) ON DELETE cascade,
@@ -275,6 +305,11 @@ describe("appRouter", () => {
         quantity: 2,
         reviewReason: "Rarity Review",
         reviewStatus: "requires_review",
+        scanEvidence: {
+          bestFrame: null,
+          candidateFrames: [],
+          ocrEvidence: null,
+        },
       });
       expect(item.latestPriceSnapshot).toMatchObject({
         status: "priced",
@@ -393,6 +428,109 @@ describe("appRouter", () => {
       );
       expect(item?.cardType).toBe("Normal Monster");
       expect(item?.frameType).toBe("normal");
+    } finally {
+      close();
+    }
+  });
+
+  it("returns scan evidence for captured workspace items", async () => {
+    const { caller, db, close } = createTestCaller();
+
+    try {
+      const session = await caller.sessions.create();
+      const [bestFrame] = await db
+        .insert(schema.bestFrames)
+        .values({
+          storagePath: "data/best-frames/test-frame.jpg",
+          mimeType: "image/jpeg",
+          sizeBytes: 1234,
+        })
+        .returning();
+      const [item] = await db
+        .insert(schema.sessionItems)
+        .values({
+          sessionId: session.id,
+          bestFrameId: bestFrame.id,
+          captureFingerprint: "capture-1",
+          entrySource: "capture",
+          cardName: "Captured card",
+          setCode: "Unknown",
+          passcode: "Unknown",
+          rarity: "Unknown",
+          printingIdentityTrusted: false,
+          edition: "1st Edition",
+          language: "English",
+          condition: "Mint",
+          quantity: 1,
+        })
+        .returning();
+      await db.insert(schema.captureCandidateFrames).values([
+        {
+          sessionItemId: item.id,
+          position: 2,
+          selectedAsBest: true,
+          mimeType: "image/jpeg",
+          sizeBytes: 1234,
+          cardLike: true,
+          brightness: 91,
+          signature: "abcd",
+        },
+        {
+          sessionItemId: item.id,
+          position: 1,
+          selectedAsBest: false,
+          mimeType: "image/jpeg",
+          sizeBytes: 900,
+          cardLike: false,
+          brightness: 75,
+          signature: "abce",
+        },
+      ]);
+      await db.insert(schema.ocrEvidence).values({
+        sessionItemId: item.id,
+        status: "pending",
+      });
+
+      const [workspaceItem] = await caller.sessions.items({ id: session.id });
+
+      expect(workspaceItem?.scanEvidence.bestFrame).toMatchObject({
+        id: bestFrame.id,
+        url: `/api/capture/best-frame/${bestFrame.id}`,
+        storagePath: "data/best-frames/test-frame.jpg",
+        mimeType: "image/jpeg",
+        sizeBytes: 1234,
+      });
+      expect(
+        workspaceItem?.scanEvidence.candidateFrames.map((frame) => ({
+          position: frame.position,
+          selectedAsBest: frame.selectedAsBest,
+          cardLike: frame.cardLike,
+          brightness: frame.brightness,
+          signature: frame.signature,
+        })),
+      ).toEqual([
+        {
+          position: 1,
+          selectedAsBest: false,
+          cardLike: false,
+          brightness: 75,
+          signature: "abce",
+        },
+        {
+          position: 2,
+          selectedAsBest: true,
+          cardLike: true,
+          brightness: 91,
+          signature: "abcd",
+        },
+      ]);
+      expect(workspaceItem?.scanEvidence.ocrEvidence).toMatchObject({
+        status: "pending",
+        cardNameText: null,
+        setCodeText: null,
+        editionText: null,
+        serialNumberText: null,
+      });
     } finally {
       close();
     }

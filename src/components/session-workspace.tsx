@@ -8,8 +8,10 @@ import {
   ChevronRight,
   Check,
   Plus,
+  ImageOff,
   QrCode,
   RefreshCw,
+  ScanSearch,
   Save,
   Search,
   Wifi,
@@ -149,6 +151,18 @@ function croppedCardArtUrl(serialNumber: string, imageUrl: string | null) {
   return imageUrl
     .replace("/images/cards_small/", "/images/cards_cropped/")
     .replace("/images/cards/", "/images/cards_cropped/");
+}
+
+function formatBytes(sizeBytes: number) {
+  if (sizeBytes < 1024) {
+    return `${sizeBytes} B`;
+  }
+
+  if (sizeBytes < 1024 * 1024) {
+    return `${(sizeBytes / 1024).toFixed(1)} KB`;
+  }
+
+  return `${(sizeBytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
 export function SessionWorkspace({ sessionId }: { sessionId: number }) {
@@ -937,6 +951,8 @@ export function SessionWorkspace({ sessionId }: { sessionId: number }) {
                     </div>
                   </div>
 
+                  {selectedItem ? <ScanDetails item={selectedItem} /> : null}
+
                   <div className="flex flex-wrap items-center gap-2">
                     <Button type="button" onClick={saveEditor} disabled={saving}>
                       {selectedItem ? (
@@ -1004,6 +1020,179 @@ export function SessionWorkspace({ sessionId }: { sessionId: number }) {
         </section>
       </div>
     </main>
+  );
+}
+
+function ScanDetails({ item }: { item: SessionItem }) {
+  const bestFrame = item.scanEvidence.bestFrame;
+  const candidateFrames = item.scanEvidence.candidateFrames;
+  const ocrEvidence = item.scanEvidence.ocrEvidence;
+  const ocrFields = [
+    {
+      label: "Card name",
+      value: ocrEvidence?.cardNameText,
+      confidence: ocrEvidence?.cardNameConfidence,
+    },
+    {
+      label: "Set Code",
+      value: ocrEvidence?.setCodeText,
+      confidence: ocrEvidence?.setCodeConfidence,
+    },
+    {
+      label: "Edition",
+      value: ocrEvidence?.editionText,
+      confidence: ocrEvidence?.editionConfidence,
+    },
+    {
+      label: "Serial Number",
+      value: ocrEvidence?.serialNumberText,
+      confidence: ocrEvidence?.serialNumberConfidence,
+    },
+  ];
+  const hasOcrFieldValue = ocrFields.some((field) => field.value);
+
+  return (
+    <details className="rounded-lg border bg-background p-3 text-sm">
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
+        <span className="flex min-w-0 items-center gap-2 font-bold">
+          <ScanSearch className="h-4 w-4 shrink-0" aria-hidden="true" />
+          <span>Scan details</span>
+        </span>
+        <span className="shrink-0 text-xs text-muted-foreground">
+          {bestFrame ? "Best Frame stored" : "No scan image"}
+        </span>
+      </summary>
+
+      <div className="mt-3 grid gap-3 lg:grid-cols-[minmax(0,220px)_minmax(0,1fr)]">
+        <section className="min-w-0 rounded-md border bg-muted/20 p-3">
+          <p className="font-bold">Best Frame</p>
+          {bestFrame ? (
+            <div className="mt-2 grid gap-2">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                className="max-h-80 w-full rounded-md border bg-black object-contain"
+                src={bestFrame.url}
+                alt={`Best Frame for ${itemLabel(item)}`}
+              />
+              <dl className="grid gap-1 text-xs text-muted-foreground">
+                <div className="min-w-0">
+                  <dt className="font-semibold text-foreground">Stored</dt>
+                  <dd>{formatter.format(new Date(bestFrame.createdAt))}</dd>
+                </div>
+                <div className="min-w-0">
+                  <dt className="font-semibold text-foreground">File</dt>
+                  <dd className="break-all">
+                    {bestFrame.mimeType}, {formatBytes(bestFrame.sizeBytes)}
+                  </dd>
+                </div>
+                <div className="min-w-0">
+                  <dt className="font-semibold text-foreground">Path</dt>
+                  <dd className="break-all">{bestFrame.storagePath}</dd>
+                </div>
+              </dl>
+            </div>
+          ) : (
+            <div className="mt-2 flex items-start gap-2 rounded-md border border-dashed bg-muted/30 p-3 text-muted-foreground">
+              <ImageOff className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+              <p>
+                {item.entrySource === "manual"
+                  ? "No scan image exists. This Session Item was created manually."
+                  : "No scan image is linked to this Session Item."}
+              </p>
+            </div>
+          )}
+        </section>
+
+        <section className="grid min-w-0 gap-3">
+          <div className="rounded-md border bg-muted/20 p-3">
+            <p className="font-bold">Candidate Frames</p>
+            {candidateFrames.length > 0 ? (
+              <div className="mt-2 grid gap-2">
+                {candidateFrames.map((frame) => (
+                  <div
+                    className="grid gap-2 rounded-md border bg-background p-2 text-xs text-muted-foreground sm:grid-cols-[72px_1fr]"
+                    key={frame.id}
+                  >
+                    <div className="font-bold text-foreground">
+                      Frame {frame.position}
+                      {frame.selectedAsBest ? (
+                        <span className="ml-1 text-emerald-700">Best</span>
+                      ) : null}
+                    </div>
+                    <div className="min-w-0">
+                      <span>{formatBytes(frame.sizeBytes)}</span>
+                      <span> · {frame.mimeType}</span>
+                      <span>
+                        {" "}
+                        · {frame.cardLike === null
+                          ? "card shape unknown"
+                          : frame.cardLike
+                            ? "card-like"
+                            : "not card-like"}
+                      </span>
+                      {frame.brightness !== null ? (
+                        <span> · brightness {frame.brightness}</span>
+                      ) : null}
+                      {frame.signature ? (
+                        <span className="block truncate">
+                          signature {frame.signature}
+                        </span>
+                      ) : null}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="mt-2 text-muted-foreground">
+                No candidate-frame metadata is recorded for this Session Item.
+              </p>
+            )}
+          </div>
+
+          <div className="rounded-md border bg-muted/20 p-3">
+            <p className="font-bold">OCR Evidence</p>
+            {ocrEvidence ? (
+              <div className="mt-2 grid gap-2">
+                <p className="text-muted-foreground">
+                  Status: <span className="font-medium">{ocrEvidence.status}</span>
+                  {hasOcrFieldValue ? "" : " · Waiting for OCR pipeline output."}
+                </p>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  {ocrFields.map((field) => (
+                    <div
+                      className="rounded-md border bg-background p-2"
+                      key={field.label}
+                    >
+                      <p className="text-xs font-bold text-muted-foreground">
+                        {field.label}
+                      </p>
+                      <p className="mt-1 font-medium">
+                        {field.value ?? "No OCR candidate yet"}
+                      </p>
+                      {field.confidence !== null &&
+                      field.confidence !== undefined ? (
+                        <p className="text-xs text-muted-foreground">
+                          Confidence {field.confidence}
+                        </p>
+                      ) : null}
+                    </div>
+                  ))}
+                </div>
+                {ocrEvidence.rawText ? (
+                  <pre className="max-h-36 overflow-auto rounded-md border bg-background p-2 text-xs">
+                    {ocrEvidence.rawText}
+                  </pre>
+                ) : null}
+              </div>
+            ) : (
+              <p className="mt-2 text-muted-foreground">
+                No OCR Evidence is recorded for this Session Item.
+              </p>
+            )}
+          </div>
+        </section>
+      </div>
+    </details>
   );
 }
 

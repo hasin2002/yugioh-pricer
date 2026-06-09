@@ -19,12 +19,9 @@ export function isCapturedSceneResetFrame(
   capturedSignature: string | null,
   movementThreshold: number,
 ) {
-  if (!frame?.cardLike) {
-    return true;
+  if (!frame || capturedSignature === null) {
+    return false;
   }
 
-  return (
-    capturedSignature !== null &&
-    signatureDistance(capturedSignature, frame.signature) >= movementThreshold
-  );
+  return signatureDistance(capturedSignature, frame.signature) >= movementThreshold;
 }

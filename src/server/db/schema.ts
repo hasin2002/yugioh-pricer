@@ -99,6 +99,48 @@ export const sessionItems = sqliteTable("session_items", {
     .notNull(),
 });
 
+export const captureCandidateFrames = sqliteTable("capture_candidate_frames", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  sessionItemId: integer("session_item_id")
+    .notNull()
+    .references(() => sessionItems.id, { onDelete: "cascade" }),
+  position: integer("position").notNull(),
+  selectedAsBest: integer("selected_as_best", { mode: "boolean" })
+    .default(false)
+    .notNull(),
+  mimeType: text("mime_type").notNull(),
+  sizeBytes: integer("size_bytes").notNull(),
+  cardLike: integer("card_like", { mode: "boolean" }),
+  brightness: integer("brightness"),
+  signature: text("signature"),
+  createdAt: integer("created_at", { mode: "timestamp" })
+    .default(sql`(unixepoch())`)
+    .notNull(),
+});
+
+export const ocrEvidence = sqliteTable("ocr_evidence", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  sessionItemId: integer("session_item_id")
+    .notNull()
+    .references(() => sessionItems.id, { onDelete: "cascade" }),
+  status: text("status").default("pending").notNull(),
+  rawText: text("raw_text"),
+  cardNameText: text("card_name_text"),
+  cardNameConfidence: integer("card_name_confidence"),
+  setCodeText: text("set_code_text"),
+  setCodeConfidence: integer("set_code_confidence"),
+  editionText: text("edition_text"),
+  editionConfidence: integer("edition_confidence"),
+  serialNumberText: text("serial_number_text"),
+  serialNumberConfidence: integer("serial_number_confidence"),
+  createdAt: integer("created_at", { mode: "timestamp" })
+    .default(sql`(unixepoch())`)
+    .notNull(),
+  updatedAt: integer("updated_at", { mode: "timestamp" })
+    .default(sql`(unixepoch())`)
+    .notNull(),
+});
+
 export const priceSnapshots = sqliteTable("price_snapshots", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   sessionItemId: integer("session_item_id")

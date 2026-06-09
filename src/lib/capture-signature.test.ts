@@ -14,11 +14,11 @@ describe("signatureDistance", () => {
 });
 
 describe("isCapturedSceneResetFrame", () => {
-  it("resets when the camera no longer sees a card-like frame", () => {
-    expect(isCapturedSceneResetFrame(null, "0123", 4)).toBe(true);
+  it("does not reset from missing frames or minor non-card-like movement", () => {
+    expect(isCapturedSceneResetFrame(null, "0123", 4)).toBe(false);
     expect(
       isCapturedSceneResetFrame({ cardLike: false, signature: "0123" }, "0123", 4),
-    ).toBe(true);
+    ).toBe(false);
   });
 
   it("keeps the captured state while the same card remains in view", () => {
@@ -27,9 +27,12 @@ describe("isCapturedSceneResetFrame", () => {
     ).toBe(false);
   });
 
-  it("resets when a different card-like scene replaces the captured card", () => {
+  it("resets when the scene changes substantially after capture", () => {
     expect(
       isCapturedSceneResetFrame({ cardLike: true, signature: "89ab" }, "0123", 4),
+    ).toBe(true);
+    expect(
+      isCapturedSceneResetFrame({ cardLike: false, signature: "89ab" }, "0123", 4),
     ).toBe(true);
   });
 });

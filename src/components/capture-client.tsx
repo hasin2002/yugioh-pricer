@@ -61,9 +61,9 @@ const DETECTION_INTERVAL_MS = 300;
 const BURST_FRAME_INTERVAL_MS = 180;
 const STABLE_FRAME_TARGET = 2;
 const SIGNATURE_MOVEMENT_THRESHOLD = 64;
-const CAPTURED_SCENE_CHANGE_THRESHOLD = 72;
+const CAPTURED_SCENE_CHANGE_THRESHOLD = 128;
 const MIN_USABLE_BRIGHTNESS = 18;
-const CAPTURED_RESET_FRAME_TARGET = 3;
+const CAPTURED_RESET_FRAME_TARGET = 4;
 
 export function CaptureClient() {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -161,6 +161,7 @@ export function CaptureClient() {
         formData.set("joinCode", joinCode);
         formData.set("clientId", clientId);
         formData.set("captureFingerprint", fingerprintForFrames(frames));
+        formData.set("candidateFrameMetadata", JSON.stringify(frameMetadata(frames)));
 
         frames.forEach((frame, index) => {
           formData.append("frames", frame.blob, `candidate-${index + 1}.jpg`);
@@ -743,6 +744,14 @@ function fingerprintForFrames(frames: CandidateFrame[]) {
 
 function representativeSignatureForFrames(frames: CandidateFrame[]) {
   return frames[Math.floor(frames.length / 2)]?.signature ?? null;
+}
+
+function frameMetadata(frames: CandidateFrame[]) {
+  return frames.map((frame) => ({
+    cardLike: frame.cardLike,
+    brightness: frame.brightness,
+    signature: frame.signature,
+  }));
 }
 
 function canvasBlob(canvas: HTMLCanvasElement) {
