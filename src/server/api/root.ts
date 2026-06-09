@@ -207,15 +207,11 @@ function createJoinCode() {
   return randomBytes(5).toString("base64url").toUpperCase();
 }
 
-function configuredPhoneSafeOrigin() {
+function configuredPhoneSafeOrigin(requestOrigin: string | null = null) {
   const origin = process.env.PHONE_SAFE_HTTPS_ORIGIN?.trim();
 
-  if (!origin) {
-    return null;
-  }
-
   try {
-    const url = new URL(origin);
+    const url = new URL(origin || requestOrigin || "");
 
     if (url.protocol !== "https:") {
       return null;
@@ -231,8 +227,8 @@ function configuredPhoneSafeOrigin() {
   }
 }
 
-function joinUrlFor(joinCode: string) {
-  const origin = configuredPhoneSafeOrigin();
+function joinUrlFor(joinCode: string, requestOrigin: string | null = null) {
+  const origin = configuredPhoneSafeOrigin(requestOrigin);
 
   return origin ? `${origin}/capture?join=${encodeURIComponent(joinCode)}` : null;
 }
@@ -716,8 +712,9 @@ async function collectionSummary(
 function serializeSession(
   session: typeof pricingSessions.$inferSelect,
   pricingSummary: SessionPricingSummary = emptySessionPricingSummary(),
+  requestOrigin: string | null = null,
 ) {
-  const joinUrl = joinUrlFor(session.joinCode);
+  const joinUrl = joinUrlFor(session.joinCode, requestOrigin);
 
   return {
     ...session,
@@ -840,7 +837,11 @@ export const appRouter = router({
         );
 
         return sessions.map((session) =>
-          serializeSession(session, pricingSummaries.get(session.id)),
+          serializeSession(
+            session,
+            pricingSummaries.get(session.id),
+            ctx.requestOrigin,
+          ),
         );
       }),
     get: publicProcedure
@@ -859,7 +860,11 @@ export const appRouter = router({
           session,
         ]);
 
-        return serializeSession(session, pricingSummaries.get(session.id));
+        return serializeSession(
+          session,
+          pricingSummaries.get(session.id),
+          ctx.requestOrigin,
+        );
       }),
     summary: publicProcedure.query(async ({ ctx }) => {
       const [activeSessions, allSessions] = await Promise.all([
@@ -892,6 +897,7 @@ export const appRouter = router({
           ? serializeSession(
               continueSession,
               pricingSummaries.get(continueSession.id),
+              ctx.requestOrigin,
             )
           : null,
       };
@@ -910,7 +916,7 @@ export const appRouter = router({
         type: "session_status_changed",
       });
 
-      return serializeSession(session);
+      return serializeSession(session, undefined, ctx.requestOrigin);
     }),
     rename: publicProcedure
       .input(renameSessionInputSchema)
@@ -928,7 +934,7 @@ export const appRouter = router({
           });
         }
 
-        return session ? serializeSession(session) : null;
+        return session ? serializeSession(session, undefined, ctx.requestOrigin) : null;
       }),
     archive: publicProcedure
       .input(sessionIdInputSchema)
@@ -946,7 +952,7 @@ export const appRouter = router({
           });
         }
 
-        return session ? serializeSession(session) : null;
+        return session ? serializeSession(session, undefined, ctx.requestOrigin) : null;
       }),
     unarchive: publicProcedure
       .input(sessionIdInputSchema)
@@ -964,7 +970,7 @@ export const appRouter = router({
           });
         }
 
-        return session ? serializeSession(session) : null;
+        return session ? serializeSession(session, undefined, ctx.requestOrigin) : null;
       }),
     delete: publicProcedure
       .input(sessionIdInputSchema)
@@ -1316,7 +1322,7 @@ export const appRouter = router({
         ) {
           return {
             status: "already_claimed" as const,
-            session: serializeSession(session),
+            session: serializeSession(session, undefined, ctx.requestOrigin),
             activeCaptureClientId: session.activeCaptureClientId,
           };
         }
@@ -1338,7 +1344,7 @@ export const appRouter = router({
 
         return {
           status: "joined" as const,
-          session: serializeSession(updatedSession),
+          session: serializeSession(updatedSession, undefined, ctx.requestOrigin),
           activeCaptureClientId: updatedSession.activeCaptureClientId,
         };
       }),

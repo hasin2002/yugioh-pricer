@@ -4,6 +4,7 @@ export type CaptureFrameQuality = {
   edgeScore: number;
   matchedEdges: number;
   signature: string;
+  textureScore: number;
 };
 
 type PixelSource = {
@@ -18,8 +19,10 @@ const GUIDE_WIDTH_RATIO = 0.78;
 const EDGE_SAMPLE_COUNT = 28;
 const EDGE_INSET_RATIO = 0.025;
 const EDGE_CONTRAST_THRESHOLD = 24;
-const MIN_MATCHED_EDGES = 3;
 const MIN_BRIGHTNESS = 18;
+const MIN_MATCHED_EDGES = 3;
+const MIN_CARD_TEXTURE_SCORE = 18;
+const MIN_EDGE_ASSISTED_TEXTURE_SCORE = 8;
 
 export function captureGuideRect(width: number, height: number) {
   let guideHeight = height * GUIDE_HEIGHT_RATIO;
@@ -51,12 +54,18 @@ export function captureFrameQuality(source: PixelSource): CaptureFrameQuality {
     .length;
   const edgeScore =
     edges.reduce((total, score) => total + score, 0) / Math.max(1, edges.length);
+  const textureScore = guideTextureScore(source);
+  const hasCardEvidence =
+    matchedEdges >= MIN_MATCHED_EDGES ||
+    textureScore >= MIN_CARD_TEXTURE_SCORE ||
+    (matchedEdges >= 2 && textureScore >= MIN_EDGE_ASSISTED_TEXTURE_SCORE);
 
   return {
     ...sample,
-    cardLike: sample.brightness >= MIN_BRIGHTNESS && matchedEdges >= MIN_MATCHED_EDGES,
+    cardLike: sample.brightness >= MIN_BRIGHTNESS && hasCardEvidence,
     edgeScore,
     matchedEdges,
+    textureScore,
   };
 }
 
@@ -96,6 +105,44 @@ function guideEdgeContrasts(source: PixelSource) {
     horizontalEdgeContrast(source, rect.top, rect.left, rect.right, inset),
     horizontalEdgeContrast(source, rect.bottom, rect.left, rect.right, -inset),
   ];
+}
+
+function guideTextureScore(source: PixelSource) {
+  const rect = captureGuideRect(source.width, source.height);
+  const columns = 10;
+  const rows = 14;
+  const samples: number[][] = [];
+
+  for (let row = 0; row < rows; row += 1) {
+    const sampleRow: number[] = [];
+
+    for (let column = 0; column < columns; column += 1) {
+      const x = rect.left + (rect.width * (column + 0.5)) / columns;
+      const y = rect.top + (rect.height * (row + 0.5)) / rows;
+      sampleRow.push(luminanceAt(source, x, y));
+    }
+
+    samples.push(sampleRow);
+  }
+
+  let total = 0;
+  let comparisons = 0;
+
+  for (let row = 0; row < rows; row += 1) {
+    for (let column = 0; column < columns; column += 1) {
+      if (column + 1 < columns) {
+        total += Math.abs(samples[row]![column]! - samples[row]![column + 1]!);
+        comparisons += 1;
+      }
+
+      if (row + 1 < rows) {
+        total += Math.abs(samples[row]![column]! - samples[row + 1]![column]!);
+        comparisons += 1;
+      }
+    }
+  }
+
+  return total / Math.max(1, comparisons);
 }
 
 function verticalEdgeContrast(

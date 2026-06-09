@@ -98,9 +98,21 @@ function createTestCaller() {
   const db = drizzle(sqlite, { schema });
 
   return {
-    caller: appRouter.createCaller({ db }),
+    caller: appRouter.createCaller({ db, requestOrigin: null }),
     db,
     close: () => sqlite.close(),
+  };
+}
+
+function createTestCallerForOrigin(requestOrigin: string) {
+  const testContext = createTestCaller();
+
+  return {
+    ...testContext,
+    caller: appRouter.createCaller({
+      db: testContext.db,
+      requestOrigin,
+    }),
   };
 }
 
@@ -299,6 +311,25 @@ describe("appRouter", () => {
       });
       expect(workspaceSession?.joinQrSvg).toContain("<svg");
       await expect(caller.sessions.get({ id: 999 })).resolves.toBeNull();
+    } finally {
+      close();
+    }
+  });
+
+  it("uses the public HTTPS request origin for capture QR links", async () => {
+    const { caller, close } = createTestCallerForOrigin(
+      "https://discuss-nuclear-font-tab.trycloudflare.com",
+    );
+
+    try {
+      const session = await caller.sessions.create();
+      const workspaceSession = await caller.sessions.get({ id: session.id });
+
+      expect(workspaceSession?.joinUrl).toBe(
+        `https://discuss-nuclear-font-tab.trycloudflare.com/capture?join=${session.joinCode}`,
+      );
+      expect(workspaceSession?.joinQrSvg).toContain("<svg");
+      expect(workspaceSession?.phoneSafeOriginConfigured).toBe(true);
     } finally {
       close();
     }

@@ -82,4 +82,36 @@ describe("captureFrameQuality", () => {
     expect(quality.cardLike).toBe(true);
     expect(quality.matchedEdges).toBe(4);
   });
+
+  it("accepts card-like art and text texture even when the border is offset", () => {
+    const width = 240;
+    const height = 360;
+    const data = pixels(width, height, 95);
+    const guide = captureGuideRect(width, height);
+
+    fillRect(
+      data,
+      width,
+      guide.left - 10,
+      guide.top - 14,
+      guide.right + 12,
+      guide.bottom + 16,
+      175,
+    );
+
+    for (let row = 0; row < 12; row += 1) {
+      const y = guide.top + 28 + row * 14;
+      fillRect(data, width, guide.left + 18, y, guide.right - 18, y + 5, 55);
+    }
+
+    for (let column = 0; column < 6; column += 1) {
+      const x = guide.left + 28 + column * 18;
+      fillRect(data, width, x, guide.top + 80, x + 10, guide.top + 170, 220);
+    }
+
+    const quality = captureFrameQuality({ data, width, height });
+
+    expect(quality.cardLike).toBe(true);
+    expect(quality.textureScore).toBeGreaterThan(18);
+  });
 });
