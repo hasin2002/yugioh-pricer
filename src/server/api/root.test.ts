@@ -67,6 +67,7 @@ function createTestCaller() {
       id integer PRIMARY KEY AUTOINCREMENT NOT NULL,
       session_id integer NOT NULL REFERENCES pricing_sessions(id) ON DELETE cascade,
       best_frame_id integer REFERENCES best_frames(id) ON DELETE set null,
+      capture_fingerprint text,
       entry_source text NOT NULL,
       card_name text NOT NULL,
       set_code text NOT NULL,
@@ -546,6 +547,50 @@ describe("appRouter", () => {
         ]),
       );
       expect(listedSession?.reviewCount).toBe(0);
+    } finally {
+      close();
+    }
+  });
+
+  it("adjusts captured item quantity and never decrements below one", async () => {
+    const { caller, db, close } = createTestCaller();
+
+    try {
+      const session = await caller.sessions.create();
+      const [item] = await db
+        .insert(schema.sessionItems)
+        .values({
+          sessionId: session.id,
+          captureFingerprint: "fingerprint-1",
+          entrySource: "capture",
+          cardName: "Captured card",
+          setCode: "Unknown",
+          passcode: "Unknown",
+          rarity: "Unknown",
+          printingIdentityTrusted: false,
+          edition: "1st Edition",
+          language: "English",
+          condition: "Mint",
+          quantity: 1,
+        })
+        .returning();
+
+      const incremented = await caller.sessions.adjustItemQuantity({
+        id: item.id,
+        delta: 1,
+      });
+      const decremented = await caller.sessions.adjustItemQuantity({
+        id: item.id,
+        delta: -1,
+      });
+      const floored = await caller.sessions.adjustItemQuantity({
+        id: item.id,
+        delta: -1,
+      });
+
+      expect(incremented?.quantity).toBe(2);
+      expect(decremented?.quantity).toBe(1);
+      expect(floored?.quantity).toBe(1);
     } finally {
       close();
     }

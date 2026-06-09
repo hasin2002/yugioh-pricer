@@ -75,6 +75,7 @@ export const sessionItems = sqliteTable("session_items", {
   bestFrameId: integer("best_frame_id").references(() => bestFrames.id, {
     onDelete: "set null",
   }),
+  captureFingerprint: text("capture_fingerprint"),
   entrySource: text("entry_source").notNull(),
   cardName: text("card_name").notNull(),
   setCode: text("set_code").notNull(),

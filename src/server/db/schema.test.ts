@@ -44,6 +44,7 @@ describe("database schema", () => {
     expect(sessionItems[Symbol.for("drizzle:Name")]).toBe("session_items");
     expect(sessionItems.sessionId.name).toBe("session_id");
     expect(sessionItems.bestFrameId.name).toBe("best_frame_id");
+    expect(sessionItems.captureFingerprint.name).toBe("capture_fingerprint");
     expect(sessionItems.entrySource.name).toBe("entry_source");
     expect(sessionItems.rarityConfirmedAt.name).toBe("rarity_confirmed_at");
     expect(sessionItems.printingIdentityTrusted.name).toBe(

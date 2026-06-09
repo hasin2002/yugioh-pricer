@@ -109,6 +109,10 @@ const bulkConfirmRarityInputSchema = z.object({
   ids: z.array(z.number().int().positive()).min(1).max(100),
 });
 
+const adjustSessionItemQuantityInputSchema = sessionItemIdInputSchema.extend({
+  delta: z.union([z.literal(-1), z.literal(1)]),
+});
+
 const collectionSortSchema = z.enum([
   "cardName",
   "setCode",
@@ -1167,6 +1171,41 @@ export const appRouter = router({
           sessionId: item.sessionId,
           type: "review_changed",
         });
+
+        return serializeSessionItem(item);
+      }),
+    adjustItemQuantity: publicProcedure
+      .input(adjustSessionItemQuantityInputSchema)
+      .mutation(async ({ ctx, input }) => {
+        const [existingItem] = await ctx.db
+          .select()
+          .from(sessionItems)
+          .where(eq(sessionItems.id, input.id));
+
+        if (!existingItem) {
+          return null;
+        }
+
+        const now = new Date();
+        const quantity = Math.max(1, existingItem.quantity + input.delta);
+        const [item] = await ctx.db
+          .update(sessionItems)
+          .set({ quantity, updatedAt: now })
+          .where(eq(sessionItems.id, input.id))
+          .returning();
+
+        await updateSessionReviewCount(ctx.db, item.sessionId, now);
+
+        publishSessionEvent({
+          sessionId: item.sessionId,
+          type: "quantity_changed",
+        });
+        if (reviewReasonFor(item)) {
+          publishSessionEvent({
+            sessionId: item.sessionId,
+            type: "review_changed",
+          });
+        }
 
         return serializeSessionItem(item);
       }),
