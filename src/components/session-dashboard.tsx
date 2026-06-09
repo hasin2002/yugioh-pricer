@@ -51,8 +51,11 @@ import {
 type RouterOutputs = inferRouterOutputs<AppRouter>;
 type Session = RouterOutputs["sessions"]["list"][number];
 type Summary = RouterOutputs["sessions"]["summary"];
+type Collection = RouterOutputs["collection"]["list"];
 type CardMetadataResult = RouterOutputs["cards"]["searchMetadata"][number];
 type SessionItem = RouterOutputs["sessions"]["items"][number];
+type CollectionSortBy = "cardName" | "setCode" | "condition" | "quantity" | "estimatedValue" | "sessionCount";
+type CollectionSortDirection = "asc" | "desc";
 
 type ManualEntryForm = {
   cardName: string;
@@ -70,6 +73,7 @@ const formatter = new Intl.DateTimeFormat("en-GB", {
   timeStyle: "short",
 });
 const MANUAL_SEARCH_DEBOUNCE_MS = 250;
+const COLLECTION_PAGE_SIZE = 5;
 
 function formatDate(date: string) {
   return formatter.format(new Date(date));
@@ -117,6 +121,13 @@ function emptyManualEntryForm(): ManualEntryForm {
 export function SessionDashboard() {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [summary, setSummary] = useState<Summary | null>(null);
+  const [collection, setCollection] = useState<Collection | null>(null);
+  const [collectionQuery, setCollectionQuery] = useState("");
+  const [collectionSortBy, setCollectionSortBy] =
+    useState<CollectionSortBy>("cardName");
+  const [collectionSortDirection, setCollectionSortDirection] =
+    useState<CollectionSortDirection>("asc");
+  const [collectionPage, setCollectionPage] = useState(1);
   const [includeArchived, setIncludeArchived] = useState(false);
   const [loading, setLoading] = useState(true);
   const [savingId, setSavingId] = useState<number | null>(null);
@@ -161,14 +172,44 @@ export function SessionDashboard() {
 
   const refresh = useCallback(async () => {
     setLoading(true);
-    const [nextSessions, nextSummary] = await Promise.all([
+    const [nextSessions, nextSummary, nextCollection] = await Promise.all([
       trpc.sessions.list.query({ includeArchived }),
       trpc.sessions.summary.query(),
+      trpc.collection.list.query({
+        query: collectionQuery,
+        sortBy: collectionSortBy,
+        sortDirection: collectionSortDirection,
+        page: collectionPage,
+        pageSize: COLLECTION_PAGE_SIZE,
+      }),
     ]);
     setSessions(nextSessions);
     setSummary(nextSummary);
+    setCollection(nextCollection);
     setLoading(false);
-  }, [includeArchived, trpc]);
+  }, [
+    collectionPage,
+    collectionQuery,
+    collectionSortBy,
+    collectionSortDirection,
+    includeArchived,
+    trpc,
+  ]);
+
+  function updateCollectionQuery(value: string) {
+    setCollectionQuery(value);
+    setCollectionPage(1);
+  }
+
+  function updateCollectionSortBy(value: CollectionSortBy) {
+    setCollectionSortBy(value);
+    setCollectionPage(1);
+  }
+
+  function updateCollectionSortDirection(value: CollectionSortDirection) {
+    setCollectionSortDirection(value);
+    setCollectionPage(1);
+  }
 
   useEffect(() => {
     void refresh();
@@ -517,6 +558,17 @@ export function SessionDashboard() {
           </Card>
           <Card className="gap-2 rounded-lg p-[18px]">
             <p className="text-[13px] font-bold text-muted-foreground">
+              Collection rows
+            </p>
+            <p className="text-3xl font-extrabold leading-none">
+              {summary?.collectionRowCount ?? 0}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              {summary?.collectionItemCount ?? 0} scanned cards
+            </p>
+          </Card>
+          <Card className="gap-2 rounded-lg p-[18px]">
+            <p className="text-[13px] font-bold text-muted-foreground">
               Review queue
             </p>
             <p className="text-3xl font-extrabold leading-none">
@@ -536,6 +588,163 @@ export function SessionDashboard() {
             </p>
           </Card>
         </section>
+
+        <Card
+          className="mb-6 rounded-lg"
+          aria-labelledby="collection-title"
+        >
+          <CardHeader>
+            <div className="min-w-0">
+              <CardTitle className="text-[17px]" id="collection-title">
+                Active collection
+              </CardTitle>
+              <CardDescription>
+                Aggregated by Printing Identity and condition from successful
+                Session Items.
+              </CardDescription>
+            </div>
+            <CardAction>
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <Label className="relative block">
+                  <span className="sr-only">Filter active collection</span>
+                  <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    className="h-10 w-full pl-9 sm:w-56"
+                    value={collectionQuery}
+                    placeholder="Filter collection"
+                    onChange={(event) => updateCollectionQuery(event.target.value)}
+                  />
+                </Label>
+                <Select
+                  value={collectionSortBy}
+                  onValueChange={(value) =>
+                    updateCollectionSortBy(value as CollectionSortBy)
+                  }
+                >
+                  <SelectTrigger className="h-10 w-full sm:w-40">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="cardName">Card name</SelectItem>
+                    <SelectItem value="setCode">Set Code</SelectItem>
+                    <SelectItem value="condition">Condition</SelectItem>
+                    <SelectItem value="quantity">Quantity</SelectItem>
+                    <SelectItem value="estimatedValue">Value</SelectItem>
+                    <SelectItem value="sessionCount">Sessions</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Select
+                  value={collectionSortDirection}
+                  onValueChange={(value) =>
+                    updateCollectionSortDirection(value as CollectionSortDirection)
+                  }
+                >
+                  <SelectTrigger className="h-10 w-full sm:w-32">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="asc">Ascending</SelectItem>
+                    <SelectItem value="desc">Descending</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </CardAction>
+          </CardHeader>
+          <CardContent>
+            {!collection || loading ? (
+              <div className="border-t py-8 text-muted-foreground">
+                Loading collection...
+              </div>
+            ) : collection.rows.length === 0 ? (
+              <div className="border-t py-8 text-muted-foreground">
+                No successfully scanned cards in active sessions yet.
+              </div>
+            ) : (
+              <div className="overflow-x-auto border-t">
+                <table className="w-full min-w-[760px] text-left text-sm">
+                  <thead className="text-xs uppercase text-muted-foreground">
+                    <tr className="border-b">
+                      <th className="py-3 pr-4 font-bold">Card</th>
+                      <th className="py-3 pr-4 font-bold">Printing</th>
+                      <th className="py-3 pr-4 font-bold">Condition</th>
+                      <th className="py-3 pr-4 text-right font-bold">Qty</th>
+                      <th className="py-3 pr-4 text-right font-bold">Value</th>
+                      <th className="py-3 font-bold">Provenance</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {collection.rows.map((row) => (
+                      <tr className="border-b last:border-b-0" key={row.key}>
+                        <td className="py-3 pr-4">
+                          <p className="font-semibold">{row.cardName}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {row.rarity} · {row.edition}
+                          </p>
+                        </td>
+                        <td className="py-3 pr-4 text-muted-foreground">
+                          <p>{row.setCode}</p>
+                          <p className="text-xs">Serial {row.serialNumber}</p>
+                        </td>
+                        <td className="py-3 pr-4">{row.condition}</td>
+                        <td className="py-3 pr-4 text-right font-semibold">
+                          {row.quantity}
+                        </td>
+                        <td className="py-3 pr-4 text-right font-semibold">
+                          {row.estimatedValue}
+                        </td>
+                        <td className="py-3 text-muted-foreground">
+                          {row.provenance
+                            .map(
+                              (entry) =>
+                                `${entry.sessionName} (${entry.quantity})`,
+                            )
+                            .join(", ")}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <div className="flex flex-col gap-3 py-3 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
+                  <p>
+                    Showing {collection.rows.length} of{" "}
+                    {collection.filteredRowCount} matching rows
+                    {collection.filteredRowCount !== collection.collectionRowCount
+                      ? ` (${collection.collectionRowCount} total)`
+                      : ""}
+                    .
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      className="h-9"
+                      type="button"
+                      variant="outline"
+                      disabled={collection.page <= 1 || loading}
+                      onClick={() =>
+                        setCollectionPage((current) => Math.max(1, current - 1))
+                      }
+                    >
+                      Previous
+                    </Button>
+                    <span className="min-w-20 text-center">
+                      Page {collection.page} of {collection.totalPages}
+                    </span>
+                    <Button
+                      className="h-9"
+                      type="button"
+                      variant="outline"
+                      disabled={collection.page >= collection.totalPages || loading}
+                      onClick={() =>
+                        setCollectionPage((current) => current + 1)
+                      }
+                    >
+                      Next
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
 
         <Card
           className="mb-6 rounded-lg"

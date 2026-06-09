@@ -108,6 +108,33 @@ const bulkConfirmRarityInputSchema = z.object({
   ids: z.array(z.number().int().positive()).min(1).max(100),
 });
 
+const collectionSortSchema = z.enum([
+  "cardName",
+  "setCode",
+  "condition",
+  "quantity",
+  "estimatedValue",
+  "sessionCount",
+]);
+
+const collectionListInputSchema = z
+  .object({
+    includeArchived: z.boolean().default(false),
+    query: z.string().trim().max(120).default(""),
+    sortBy: collectionSortSchema.default("cardName"),
+    sortDirection: z.enum(["asc", "desc"]).default("asc"),
+    page: z.number().int().min(1).default(1),
+    pageSize: z.number().int().min(1).max(50).default(5),
+  })
+  .default({
+    includeArchived: false,
+    query: "",
+    sortBy: "cardName",
+    sortDirection: "asc",
+    page: 1,
+    pageSize: 5,
+  });
+
 type PriceSnapshot = typeof priceSnapshots.$inferSelect;
 
 type SessionPricingSummary = {
@@ -118,6 +145,49 @@ type SessionPricingSummary = {
 };
 
 type Db = BetterSQLite3Database<typeof schema>;
+type SessionItem = typeof sessionItems.$inferSelect;
+type PricingSession = typeof pricingSessions.$inferSelect;
+
+type CollectionProvenance = {
+  sessionId: number;
+  sessionName: string;
+  sessionItemId: number;
+  quantity: number;
+};
+
+type CollectionRow = {
+  key: string;
+  cardName: string;
+  setCode: string;
+  serialNumber: string;
+  rarity: string;
+  edition: string;
+  language: string;
+  condition: string;
+  quantity: number;
+  estimatedValue: string;
+  pricedItemCount: number;
+  unpricedItemCount: number;
+  provenance: CollectionProvenance[];
+};
+
+type CollectionSummary = {
+  collectionEstimatedValue: string;
+  collectionRowCount: number;
+  collectionItemCount: number;
+  filteredRowCount: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+  rows: CollectionRow[];
+};
+
+type CollectionListInput = z.infer<typeof collectionListInputSchema>;
+
+type InternalCollectionRow = CollectionRow & {
+  totalAmount: number;
+  currency: string | null;
+};
 
 function automaticSessionName(now = new Date()) {
   const formatter = new Intl.DateTimeFormat("en-GB", {
@@ -202,6 +272,19 @@ function emptySessionPricingSummary(): SessionPricingSummary {
   };
 }
 
+function emptyCollectionSummary(): CollectionSummary {
+  return {
+    collectionEstimatedValue: "£0.00",
+    collectionRowCount: 0,
+    collectionItemCount: 0,
+    filteredRowCount: 0,
+    page: 1,
+    pageSize: 5,
+    totalPages: 1,
+    rows: [],
+  };
+}
+
 function latestSnapshotsByItemId(snapshots: PriceSnapshot[]) {
   const latest = new Map<number, PriceSnapshot>();
 
@@ -222,7 +305,7 @@ function latestSnapshotsByItemId(snapshots: PriceSnapshot[]) {
 }
 
 function calculatePricingSummary(
-  items: (typeof sessionItems.$inferSelect)[],
+  items: SessionItem[],
   latestSnapshots: Map<number, PriceSnapshot>,
 ) {
   let total = 0;
@@ -272,7 +355,7 @@ function calculatePricingSummary(
   };
 }
 
-function hasTrustedPrintingIdentity(item: typeof sessionItems.$inferSelect) {
+function hasTrustedPrintingIdentity(item: SessionItem) {
   return (
     item.printingIdentityTrusted &&
     item.cardName.trim().length > 0 &&
@@ -284,7 +367,7 @@ function hasTrustedPrintingIdentity(item: typeof sessionItems.$inferSelect) {
   );
 }
 
-function reviewReasonFor(item: typeof sessionItems.$inferSelect) {
+function reviewReasonFor(item: SessionItem) {
   if (!hasTrustedPrintingIdentity(item)) {
     return "Identification Review" as const;
   }
@@ -296,7 +379,7 @@ function reviewReasonFor(item: typeof sessionItems.$inferSelect) {
   return null;
 }
 
-function reviewQuantityFor(items: (typeof sessionItems.$inferSelect)[]) {
+function reviewQuantityFor(items: SessionItem[]) {
   return items.reduce(
     (total, item) => total + (reviewReasonFor(item) ? item.quantity : 0),
     0,
@@ -320,7 +403,7 @@ async function updateSessionReviewCount(db: Db, sessionId: number, now = new Dat
 
 async function pricingSummariesForSessions(
   db: Db,
-  sessions: (typeof pricingSessions.$inferSelect)[],
+  sessions: PricingSession[],
 ) {
   if (sessions.length === 0) {
     return new Map<number, SessionPricingSummary>();
@@ -365,6 +448,264 @@ async function pricingSummariesForSessions(
   }
 
   return summaries;
+}
+
+function collectionKeyFor(item: SessionItem) {
+  return [
+    item.cardName,
+    item.setCode,
+    item.passcode,
+    item.rarity,
+    item.edition,
+    item.language,
+    item.condition,
+  ].join("\u001f");
+}
+
+function serializeCollectionRow(
+  item: SessionItem,
+  latestSnapshot: PriceSnapshot | undefined,
+  session: PricingSession,
+): CollectionRow {
+  let estimatedValue = "£0.00";
+  let pricedItemCount = 0;
+  let unpricedItemCount = item.quantity;
+
+  if (
+    latestSnapshot?.status === "priced" &&
+    latestSnapshot.observedAmount &&
+    latestSnapshot.currency
+  ) {
+    const amount = Number(latestSnapshot.observedAmount);
+
+    if (Number.isFinite(amount)) {
+      estimatedValue = formatCurrencyAmount(
+        amount * item.quantity,
+        latestSnapshot.currency,
+      );
+      pricedItemCount = item.quantity;
+      unpricedItemCount = 0;
+    }
+  }
+
+  return {
+    key: collectionKeyFor(item),
+    cardName: item.cardName,
+    setCode: item.setCode,
+    serialNumber: item.passcode,
+    rarity: item.rarity,
+    edition: item.edition,
+    language: item.language,
+    condition: item.condition,
+    quantity: item.quantity,
+    estimatedValue,
+    pricedItemCount,
+    unpricedItemCount,
+    provenance: [
+      {
+        sessionId: session.id,
+        sessionName: session.name,
+        sessionItemId: item.id,
+        quantity: item.quantity,
+      },
+    ],
+  };
+}
+
+function aggregateCollectionRows(
+  sessions: PricingSession[],
+  items: SessionItem[],
+  latestSnapshots: Map<number, PriceSnapshot>,
+) {
+  const sessionsById = new Map(sessions.map((session) => [session.id, session]));
+  const rows = new Map<string, InternalCollectionRow>();
+
+  for (const item of items) {
+    const session = sessionsById.get(item.sessionId);
+
+    if (!session || reviewReasonFor(item)) {
+      continue;
+    }
+
+    const key = collectionKeyFor(item);
+    const latestSnapshot = latestSnapshots.get(item.id);
+    const existing = rows.get(key);
+    const snapshotAmount =
+      latestSnapshot?.status === "priced" &&
+      latestSnapshot.observedAmount &&
+      latestSnapshot.currency
+        ? Number(latestSnapshot.observedAmount)
+        : null;
+    const itemTotal =
+      snapshotAmount !== null && Number.isFinite(snapshotAmount)
+        ? snapshotAmount * item.quantity
+        : null;
+    const itemCurrency = itemTotal !== null ? latestSnapshot?.currency ?? null : null;
+
+    if (!existing) {
+      const row = serializeCollectionRow(item, latestSnapshot, session);
+      rows.set(key, {
+        ...row,
+        totalAmount: itemTotal ?? 0,
+        currency: itemCurrency ?? "USD",
+      });
+      continue;
+    }
+
+    existing.quantity += item.quantity;
+    existing.pricedItemCount += itemTotal !== null ? item.quantity : 0;
+    existing.unpricedItemCount += itemTotal !== null ? 0 : item.quantity;
+    existing.totalAmount += itemTotal ?? 0;
+    if (itemTotal !== null) {
+      existing.currency =
+        existing.currency === itemCurrency ? existing.currency : null;
+    }
+    existing.estimatedValue = formatCurrencyAmount(
+      existing.totalAmount,
+      existing.currency,
+    );
+    existing.provenance.push({
+      sessionId: session.id,
+      sessionName: session.name,
+      sessionItemId: item.id,
+      quantity: item.quantity,
+    });
+  }
+
+  return Array.from(rows.values());
+}
+
+function collectionRowMatchesQuery(row: InternalCollectionRow, query: string) {
+  const normalizedQuery = query.trim().toLowerCase();
+
+  if (!normalizedQuery) {
+    return true;
+  }
+
+  return [
+    row.cardName,
+    row.setCode,
+    row.serialNumber,
+    row.rarity,
+    row.edition,
+    row.language,
+    row.condition,
+    ...row.provenance.map((entry) => entry.sessionName),
+  ].some((value) => value.toLowerCase().includes(normalizedQuery));
+}
+
+function compareCollectionRows(
+  left: InternalCollectionRow,
+  right: InternalCollectionRow,
+  sortBy: CollectionListInput["sortBy"],
+) {
+  if (sortBy === "quantity") {
+    return left.quantity - right.quantity;
+  }
+
+  if (sortBy === "estimatedValue") {
+    return left.totalAmount - right.totalAmount;
+  }
+
+  if (sortBy === "sessionCount") {
+    return left.provenance.length - right.provenance.length;
+  }
+
+  return left[sortBy].localeCompare(right[sortBy]);
+}
+
+function serializeCollectionRows(rows: InternalCollectionRow[]) {
+  return rows.map(({ totalAmount: _totalAmount, currency: _currency, ...row }) => row);
+}
+
+async function collectionSummary(
+  db: Db,
+  options: CollectionListInput = collectionListInputSchema.parse(undefined),
+): Promise<CollectionSummary> {
+  const sessions = options.includeArchived
+    ? await db.select().from(pricingSessions)
+    : await db
+        .select()
+        .from(pricingSessions)
+        .where(isNull(pricingSessions.archivedAt));
+
+  if (sessions.length === 0) {
+    return { ...emptyCollectionSummary(), pageSize: options.pageSize };
+  }
+
+  const items = await db
+    .select()
+    .from(sessionItems)
+    .where(
+      inArray(
+        sessionItems.sessionId,
+        sessions.map((session) => session.id),
+      ),
+    );
+
+  if (items.length === 0) {
+    return { ...emptyCollectionSummary(), pageSize: options.pageSize };
+  }
+
+  const snapshots = await db
+    .select()
+    .from(priceSnapshots)
+    .where(
+      inArray(
+        priceSnapshots.sessionItemId,
+        items.map((item) => item.id),
+      ),
+    );
+  const latestSnapshots = latestSnapshotsByItemId(snapshots);
+  const rows = aggregateCollectionRows(sessions, items, latestSnapshots);
+  const filteredRows = rows
+    .filter((row) => collectionRowMatchesQuery(row, options.query))
+    .sort((left, right) => {
+      const result = compareCollectionRows(left, right, options.sortBy);
+
+      if (result !== 0) {
+        return options.sortDirection === "asc" ? result : -result;
+      }
+
+      return left.cardName.localeCompare(right.cardName);
+    });
+  const totalPages = Math.max(1, Math.ceil(filteredRows.length / options.pageSize));
+  const page = Math.min(options.page, totalPages);
+  const startIndex = (page - 1) * options.pageSize;
+  const pageRows = filteredRows.slice(startIndex, startIndex + options.pageSize);
+  let total = 0;
+  let currency: string | null = "USD";
+
+  for (const row of rows) {
+    for (const provenance of row.provenance) {
+      const snapshot = latestSnapshots.get(provenance.sessionItemId);
+
+      if (
+        snapshot?.status === "priced" &&
+        snapshot.observedAmount &&
+        snapshot.currency
+      ) {
+        const amount = Number(snapshot.observedAmount);
+
+        if (Number.isFinite(amount)) {
+          total += amount * provenance.quantity;
+          currency = currency === snapshot.currency ? currency : null;
+        }
+      }
+    }
+  }
+
+  return {
+    collectionEstimatedValue:
+      total > 0 ? formatCurrencyAmount(total, currency) : "£0.00",
+    collectionRowCount: rows.length,
+    collectionItemCount: rows.reduce((sum, row) => sum + row.quantity, 0),
+    filteredRowCount: filteredRows.length,
+    page,
+    pageSize: options.pageSize,
+    totalPages,
+    rows: serializeCollectionRows(pageRows),
+  };
 }
 
 function serializeSession(
@@ -463,6 +804,11 @@ export const appRouter = router({
         return searchCardMetadata(ctx.db, input.query);
       }),
   }),
+  collection: router({
+    list: publicProcedure
+      .input(collectionListInputSchema)
+      .query(async ({ ctx, input }) => collectionSummary(ctx.db, input)),
+  }),
   sessions: router({
     list: publicProcedure
       .input(
@@ -525,23 +871,7 @@ export const appRouter = router({
         ctx.db,
         activeSessions,
       );
-      const activePricingItems = activeSessions.flatMap((session) => {
-        const summary = pricingSummaries.get(session.id);
-
-        return summary
-          ? [
-              {
-                value: summary.sessionEstimatedValue,
-                pricedItemCount: summary.pricedItemCount,
-              },
-            ]
-          : [];
-      });
-      const collectionTotal = activePricingItems.reduce((total, item) => {
-        const amount = Number(item.value.replace(/[^0-9.-]/g, ""));
-
-        return Number.isFinite(amount) ? total + amount : total;
-      }, 0);
+      const collection = await collectionSummary(ctx.db);
 
       return {
         activeSessionCount: activeSessions.length,
@@ -550,8 +880,9 @@ export const appRouter = router({
           (total, session) => total + session.reviewCount,
           0,
         ),
-        collectionEstimatedValue:
-          collectionTotal > 0 ? formatCurrencyAmount(collectionTotal, "USD") : "£0.00",
+        collectionEstimatedValue: collection.collectionEstimatedValue,
+        collectionRowCount: collection.collectionRowCount,
+        collectionItemCount: collection.collectionItemCount,
         continueSession: continueSession
           ? serializeSession(
               continueSession,
