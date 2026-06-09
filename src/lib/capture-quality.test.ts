@@ -24,8 +24,13 @@ function fillRect(
   bottom: number,
   value: number,
 ) {
-  for (let y = top; y < bottom; y += 1) {
-    for (let x = left; x < right; x += 1) {
+  const boundedLeft = Math.max(0, left);
+  const boundedTop = Math.max(0, top);
+  const boundedRight = Math.min(width, right);
+  const boundedBottom = Math.min(data.length / width / 4, bottom);
+
+  for (let y = boundedTop; y < boundedBottom; y += 1) {
+    for (let x = boundedLeft; x < boundedRight; x += 1) {
       const offset = (y * width + x) * 4;
       data[offset] = value;
       data[offset + 1] = value;
@@ -59,6 +64,28 @@ describe("captureFrameQuality", () => {
 
     expect(quality.cardLike).toBe(false);
     expect(quality.matchedEdges).toBeLessThan(3);
+  });
+
+  it("rejects a cutting mat grid without a card-sized rectangle", () => {
+    const width = 240;
+    const height = 360;
+    const data = pixels(width, height, 95);
+
+    for (let x = 0; x < width; x += 18) {
+      fillRect(data, width, x, 0, x + 2, height, 190);
+    }
+
+    for (let y = 0; y < height; y += 18) {
+      fillRect(data, width, 0, y, width, y + 2, 190);
+    }
+
+    for (let offset = -120; offset < width; offset += 1) {
+      fillRect(data, width, offset, offset + 170, offset + 4, offset + 174, 55);
+    }
+
+    const quality = captureFrameQuality({ data, width, height });
+
+    expect(quality.cardLike).toBe(false);
   });
 
   it("accepts a centered portrait card shape inside the capture guide", () => {
