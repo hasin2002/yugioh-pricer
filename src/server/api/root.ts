@@ -108,6 +108,33 @@ const bulkConfirmRarityInputSchema = z.object({
   ids: z.array(z.number().int().positive()).min(1).max(100),
 });
 
+const collectionSortSchema = z.enum([
+  "cardName",
+  "setCode",
+  "condition",
+  "quantity",
+  "estimatedValue",
+  "sessionCount",
+]);
+
+const collectionListInputSchema = z
+  .object({
+    includeArchived: z.boolean().default(false),
+    query: z.string().trim().max(120).default(""),
+    sortBy: collectionSortSchema.default("cardName"),
+    sortDirection: z.enum(["asc", "desc"]).default("asc"),
+    page: z.number().int().min(1).default(1),
+    pageSize: z.number().int().min(1).max(50).default(5),
+  })
+  .default({
+    includeArchived: false,
+    query: "",
+    sortBy: "cardName",
+    sortDirection: "asc",
+    page: 1,
+    pageSize: 5,
+  });
+
 type PriceSnapshot = typeof priceSnapshots.$inferSelect;
 
 type SessionPricingSummary = {
@@ -148,7 +175,18 @@ type CollectionSummary = {
   collectionEstimatedValue: string;
   collectionRowCount: number;
   collectionItemCount: number;
+  filteredRowCount: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
   rows: CollectionRow[];
+};
+
+type CollectionListInput = z.infer<typeof collectionListInputSchema>;
+
+type InternalCollectionRow = CollectionRow & {
+  totalAmount: number;
+  currency: string | null;
 };
 
 function automaticSessionName(now = new Date()) {
@@ -239,6 +277,10 @@ function emptyCollectionSummary(): CollectionSummary {
     collectionEstimatedValue: "£0.00",
     collectionRowCount: 0,
     collectionItemCount: 0,
+    filteredRowCount: 0,
+    page: 1,
+    pageSize: 5,
+    totalPages: 1,
     rows: [],
   };
 }
@@ -476,10 +518,7 @@ function aggregateCollectionRows(
   latestSnapshots: Map<number, PriceSnapshot>,
 ) {
   const sessionsById = new Map(sessions.map((session) => [session.id, session]));
-  const rows = new Map<
-    string,
-    CollectionRow & { totalAmount: number; currency: string | null }
-  >();
+  const rows = new Map<string, InternalCollectionRow>();
 
   for (const item of items) {
     const session = sessionsById.get(item.sessionId);
@@ -533,14 +572,55 @@ function aggregateCollectionRows(
     });
   }
 
-  return Array.from(rows.values())
-    .map(({ totalAmount: _totalAmount, currency: _currency, ...row }) => row)
-    .sort((left, right) => left.cardName.localeCompare(right.cardName));
+  return Array.from(rows.values());
+}
+
+function collectionRowMatchesQuery(row: InternalCollectionRow, query: string) {
+  const normalizedQuery = query.trim().toLowerCase();
+
+  if (!normalizedQuery) {
+    return true;
+  }
+
+  return [
+    row.cardName,
+    row.setCode,
+    row.serialNumber,
+    row.rarity,
+    row.edition,
+    row.language,
+    row.condition,
+    ...row.provenance.map((entry) => entry.sessionName),
+  ].some((value) => value.toLowerCase().includes(normalizedQuery));
+}
+
+function compareCollectionRows(
+  left: InternalCollectionRow,
+  right: InternalCollectionRow,
+  sortBy: CollectionListInput["sortBy"],
+) {
+  if (sortBy === "quantity") {
+    return left.quantity - right.quantity;
+  }
+
+  if (sortBy === "estimatedValue") {
+    return left.totalAmount - right.totalAmount;
+  }
+
+  if (sortBy === "sessionCount") {
+    return left.provenance.length - right.provenance.length;
+  }
+
+  return left[sortBy].localeCompare(right[sortBy]);
+}
+
+function serializeCollectionRows(rows: InternalCollectionRow[]) {
+  return rows.map(({ totalAmount: _totalAmount, currency: _currency, ...row }) => row);
 }
 
 async function collectionSummary(
   db: Db,
-  options: { includeArchived?: boolean } = {},
+  options: CollectionListInput = collectionListInputSchema.parse(undefined),
 ): Promise<CollectionSummary> {
   const sessions = options.includeArchived
     ? await db.select().from(pricingSessions)
@@ -550,7 +630,7 @@ async function collectionSummary(
         .where(isNull(pricingSessions.archivedAt));
 
   if (sessions.length === 0) {
-    return emptyCollectionSummary();
+    return { ...emptyCollectionSummary(), pageSize: options.pageSize };
   }
 
   const items = await db
@@ -564,7 +644,7 @@ async function collectionSummary(
     );
 
   if (items.length === 0) {
-    return emptyCollectionSummary();
+    return { ...emptyCollectionSummary(), pageSize: options.pageSize };
   }
 
   const snapshots = await db
@@ -578,6 +658,21 @@ async function collectionSummary(
     );
   const latestSnapshots = latestSnapshotsByItemId(snapshots);
   const rows = aggregateCollectionRows(sessions, items, latestSnapshots);
+  const filteredRows = rows
+    .filter((row) => collectionRowMatchesQuery(row, options.query))
+    .sort((left, right) => {
+      const result = compareCollectionRows(left, right, options.sortBy);
+
+      if (result !== 0) {
+        return options.sortDirection === "asc" ? result : -result;
+      }
+
+      return left.cardName.localeCompare(right.cardName);
+    });
+  const totalPages = Math.max(1, Math.ceil(filteredRows.length / options.pageSize));
+  const page = Math.min(options.page, totalPages);
+  const startIndex = (page - 1) * options.pageSize;
+  const pageRows = filteredRows.slice(startIndex, startIndex + options.pageSize);
   let total = 0;
   let currency: string | null = "USD";
 
@@ -605,7 +700,11 @@ async function collectionSummary(
       total > 0 ? formatCurrencyAmount(total, currency) : "£0.00",
     collectionRowCount: rows.length,
     collectionItemCount: rows.reduce((sum, row) => sum + row.quantity, 0),
-    rows,
+    filteredRowCount: filteredRows.length,
+    page,
+    pageSize: options.pageSize,
+    totalPages,
+    rows: serializeCollectionRows(pageRows),
   };
 }
 
@@ -707,13 +806,7 @@ export const appRouter = router({
   }),
   collection: router({
     list: publicProcedure
-      .input(
-        z
-          .object({
-            includeArchived: z.boolean().default(false),
-          })
-          .default({ includeArchived: false }),
-      )
+      .input(collectionListInputSchema)
       .query(async ({ ctx, input }) => collectionSummary(ctx.db, input)),
   }),
   sessions: router({

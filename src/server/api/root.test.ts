@@ -863,6 +863,148 @@ describe("appRouter", () => {
     }
   });
 
+  it("paginates, filters, and sorts active collection rows", async () => {
+    const { caller, db, close } = createTestCaller();
+
+    try {
+      const [session] = await db
+        .insert(schema.pricingSessions)
+        .values({ name: "Sorted Binder", joinCode: "SORTED01" })
+        .returning();
+      const now = new Date();
+      const insertedItems = await db
+        .insert(schema.sessionItems)
+        .values([
+          {
+            sessionId: session.id,
+            entrySource: "manual",
+            cardName: "Alpha Magician",
+            setCode: "SET-001",
+            passcode: "10000001",
+            rarity: "Common",
+            rarityConfirmedAt: now,
+            printingIdentityTrusted: true,
+            edition: "1st Edition",
+            language: "English",
+            condition: "Mint",
+            quantity: 1,
+          },
+          {
+            sessionId: session.id,
+            entrySource: "manual",
+            cardName: "Blue Dragon",
+            setCode: "SET-002",
+            passcode: "10000002",
+            rarity: "Rare",
+            rarityConfirmedAt: now,
+            printingIdentityTrusted: true,
+            edition: "1st Edition",
+            language: "English",
+            condition: "Mint",
+            quantity: 6,
+          },
+          {
+            sessionId: session.id,
+            entrySource: "manual",
+            cardName: "Crimson Dragon",
+            setCode: "SET-003",
+            passcode: "10000003",
+            rarity: "Rare",
+            rarityConfirmedAt: now,
+            printingIdentityTrusted: true,
+            edition: "1st Edition",
+            language: "English",
+            condition: "Near Mint",
+            quantity: 3,
+          },
+          {
+            sessionId: session.id,
+            entrySource: "manual",
+            cardName: "Delta Soldier",
+            setCode: "SET-004",
+            passcode: "10000004",
+            rarity: "Common",
+            rarityConfirmedAt: now,
+            printingIdentityTrusted: true,
+            edition: "1st Edition",
+            language: "English",
+            condition: "Played",
+            quantity: 2,
+          },
+          {
+            sessionId: session.id,
+            entrySource: "manual",
+            cardName: "Emerald Sage",
+            setCode: "SET-005",
+            passcode: "10000005",
+            rarity: "Super Rare",
+            rarityConfirmedAt: now,
+            printingIdentityTrusted: true,
+            edition: "1st Edition",
+            language: "English",
+            condition: "Mint",
+            quantity: 4,
+          },
+          {
+            sessionId: session.id,
+            entrySource: "manual",
+            cardName: "Frost Dragon",
+            setCode: "SET-006",
+            passcode: "10000006",
+            rarity: "Ultra Rare",
+            rarityConfirmedAt: now,
+            printingIdentityTrusted: true,
+            edition: "1st Edition",
+            language: "English",
+            condition: "Mint",
+            quantity: 5,
+          },
+        ])
+        .returning();
+
+      await db.insert(schema.priceSnapshots).values(
+        insertedItems.map((item) => ({
+          sessionItemId: item.id,
+          status: "priced",
+          observedAmount: String(item.quantity),
+          source: "ygoprodeck.card_sets.set_price",
+          currency: "USD",
+          observedAt: now,
+        })),
+      );
+
+      const firstPage = await caller.collection.list();
+      const secondPage = await caller.collection.list({ page: 2 });
+      const filtered = await caller.collection.list({ query: "dragon" });
+      const quantityDesc = await caller.collection.list({
+        sortBy: "quantity",
+        sortDirection: "desc",
+      });
+      const valueDesc = await caller.collection.list({
+        sortBy: "estimatedValue",
+        sortDirection: "desc",
+      });
+
+      expect(firstPage.pageSize).toBe(5);
+      expect(firstPage.page).toBe(1);
+      expect(firstPage.totalPages).toBe(2);
+      expect(firstPage.collectionRowCount).toBe(6);
+      expect(firstPage.filteredRowCount).toBe(6);
+      expect(firstPage.rows).toHaveLength(5);
+      expect(secondPage.rows).toHaveLength(1);
+      expect(filtered.filteredRowCount).toBe(3);
+      expect(filtered.rows.map((row) => row.cardName)).toEqual([
+        "Blue Dragon",
+        "Crimson Dragon",
+        "Frost Dragon",
+      ]);
+      expect(quantityDesc.rows[0]?.cardName).toBe("Blue Dragon");
+      expect(valueDesc.rows[0]?.cardName).toBe("Blue Dragon");
+    } finally {
+      close();
+    }
+  });
+
   it("excludes archived sessions from default lists and summary counts", async () => {
     const { caller, db, close } = createTestCaller();
 
