@@ -12,6 +12,8 @@ import {
   RefreshCw,
   Save,
   Search,
+  Wifi,
+  WifiOff,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
@@ -41,6 +43,11 @@ type RouterOutputs = inferRouterOutputs<AppRouter>;
 type Session = NonNullable<RouterOutputs["sessions"]["get"]>;
 type SessionItem = RouterOutputs["sessions"]["items"][number];
 type CardMetadataResult = RouterOutputs["cards"]["searchMetadata"][number];
+type SessionEvent = {
+  sessionId: number;
+  type: string;
+  occurredAt: string;
+};
 
 type EditorForm = {
   cardName: string;
@@ -160,6 +167,9 @@ export function SessionWorkspace({ sessionId }: { sessionId: number }) {
   const [suggestionsOpen, setSuggestionsOpen] = useState(false);
   const [raritySuggestionsOpen, setRaritySuggestionsOpen] = useState(false);
   const [failedArtUrl, setFailedArtUrl] = useState<string | null>(null);
+  const [liveStatus, setLiveStatus] = useState<
+    "connecting" | "connected" | "reconnecting" | "unavailable"
+  >("connecting");
   const searchRequestRef = useRef(0);
 
   const trpc = useMemo(
@@ -210,6 +220,73 @@ export function SessionWorkspace({ sessionId }: { sessionId: number }) {
   useEffect(() => {
     void loadWorkspace();
   }, [loadWorkspace]);
+
+  useEffect(() => {
+    let cancelled = false;
+    let socket: WebSocket | null = null;
+    let reconnectTimeout: number | null = null;
+
+    function scheduleReconnect() {
+      if (cancelled) {
+        return;
+      }
+
+      setLiveStatus("reconnecting");
+      reconnectTimeout = window.setTimeout(() => {
+        void connect();
+      }, 1500);
+    }
+
+    async function connect() {
+      try {
+        const response = await fetch("/api/session-events", {
+          cache: "no-store",
+        });
+        const body = (await response.json()) as { url: string };
+
+        if (cancelled) {
+          return;
+        }
+
+        const url = new URL(body.url);
+        url.searchParams.set("sessionId", String(sessionId));
+        socket = new WebSocket(url);
+
+        socket.addEventListener("open", () => {
+          setLiveStatus("connected");
+          void loadWorkspace();
+        });
+
+        socket.addEventListener("message", (event) => {
+          const sessionEvent = JSON.parse(String(event.data)) as SessionEvent;
+
+          if (sessionEvent.sessionId === sessionId) {
+            void loadWorkspace();
+          }
+        });
+
+        socket.addEventListener("close", scheduleReconnect);
+        socket.addEventListener("error", () => {
+          setLiveStatus("unavailable");
+          socket?.close();
+        });
+      } catch {
+        setLiveStatus("unavailable");
+        scheduleReconnect();
+      }
+    }
+
+    setLiveStatus("connecting");
+    void connect();
+
+    return () => {
+      cancelled = true;
+      if (reconnectTimeout !== null) {
+        window.clearTimeout(reconnectTimeout);
+      }
+      socket?.close();
+    };
+  }, [loadWorkspace, sessionId]);
 
   useEffect(() => {
     setForm(selectedItem ? formForItem(selectedItem) : emptyEditorForm());
@@ -405,6 +482,32 @@ export function SessionWorkspace({ sessionId }: { sessionId: number }) {
   const editorTitle =
     form.cardName.trim() ||
     (selectedItem ? itemLabel(selectedItem) : "New Session Item");
+  const liveStatusCopy = {
+    connected: {
+      title: "Live updates active",
+      detail: "This workspace refreshes when the session changes.",
+      className: "border-emerald-300 bg-emerald-50 text-emerald-950",
+      iconClassName: "text-emerald-700",
+    },
+    connecting: {
+      title: "Connecting live updates",
+      detail: "Waiting for the session event channel.",
+      className: "border-amber-300 bg-amber-50 text-amber-950",
+      iconClassName: "text-amber-700",
+    },
+    reconnecting: {
+      title: "Reconnecting live updates",
+      detail: "Changes may appear after the connection returns.",
+      className: "border-amber-300 bg-amber-50 text-amber-950",
+      iconClassName: "text-amber-700",
+    },
+    unavailable: {
+      title: "Live updates unavailable",
+      detail: "Refresh manually while the event channel reconnects.",
+      className: "border-destructive/40 bg-destructive/10 text-destructive",
+      iconClassName: "text-destructive",
+    },
+  }[liveStatus];
   const cardTextStyle = {
     fontFamily: '"Times New Roman", Georgia, serif',
   };
@@ -466,7 +569,7 @@ export function SessionWorkspace({ sessionId }: { sessionId: number }) {
         </aside>
 
         <section className="min-w-0 p-4 md:p-6 lg:p-8">
-          <header className="mb-6 grid gap-4 xl:grid-cols-[minmax(0,1fr)_340px]">
+          <header className="mb-6 grid gap-4 xl:grid-cols-[minmax(0,1fr)_270px_340px]">
             <div>
               <div className="flex flex-wrap items-center gap-2">
                 <h1 className="text-2xl font-bold leading-tight md:text-3xl">
@@ -481,6 +584,30 @@ export function SessionWorkspace({ sessionId }: { sessionId: number }) {
                 <span>{session.reviewCount} reviews</span>
                 <span>{session.unpricedItemCount} unpriced</span>
                 <span>Updated {formatter.format(new Date(session.updatedAt))}</span>
+              </div>
+            </div>
+
+            <div
+              className={`flex min-w-0 items-start gap-3 rounded-lg border px-3 py-2 shadow-sm ${liveStatusCopy.className}`}
+            >
+              {liveStatus === "connected" ? (
+                <Wifi
+                  className={`mt-0.5 h-5 w-5 shrink-0 ${liveStatusCopy.iconClassName}`}
+                  aria-hidden="true"
+                />
+              ) : (
+                <WifiOff
+                  className={`mt-0.5 h-5 w-5 shrink-0 ${liveStatusCopy.iconClassName}`}
+                  aria-hidden="true"
+                />
+              )}
+              <div className="min-w-0">
+                <p className="text-sm font-bold leading-tight">
+                  {liveStatusCopy.title}
+                </p>
+                <p className="mt-0.5 text-xs leading-snug">
+                  {liveStatusCopy.detail}
+                </p>
               </div>
             </div>
 

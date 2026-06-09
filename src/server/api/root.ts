@@ -12,6 +12,7 @@ import {
   DEFAULT_CARD_LANGUAGE,
 } from "@/lib/printing-options";
 import { fetchAndStorePriceSnapshot } from "@/server/cards/pricing";
+import { publishSessionEvent } from "@/server/session-events";
 import {
   cardMetadataCards,
   priceSnapshots,
@@ -900,6 +901,11 @@ export const appRouter = router({
         })
         .returning();
 
+      publishSessionEvent({
+        sessionId: session.id,
+        type: "session_status_changed",
+      });
+
       return serializeSession(session);
     }),
     rename: publicProcedure
@@ -910,6 +916,13 @@ export const appRouter = router({
           .set({ name: input.name, updatedAt: new Date() })
           .where(eq(pricingSessions.id, input.id))
           .returning();
+
+        if (session) {
+          publishSessionEvent({
+            sessionId: session.id,
+            type: "session_status_changed",
+          });
+        }
 
         return session ? serializeSession(session) : null;
       }),
@@ -922,6 +935,13 @@ export const appRouter = router({
           .where(eq(pricingSessions.id, input.id))
           .returning();
 
+        if (session) {
+          publishSessionEvent({
+            sessionId: session.id,
+            type: "session_status_changed",
+          });
+        }
+
         return session ? serializeSession(session) : null;
       }),
     unarchive: publicProcedure
@@ -933,6 +953,13 @@ export const appRouter = router({
           .where(eq(pricingSessions.id, input.id))
           .returning();
 
+        if (session) {
+          publishSessionEvent({
+            sessionId: session.id,
+            type: "session_status_changed",
+          });
+        }
+
         return session ? serializeSession(session) : null;
       }),
     delete: publicProcedure
@@ -942,6 +969,13 @@ export const appRouter = router({
           .delete(pricingSessions)
           .where(eq(pricingSessions.id, input.id))
           .returning({ id: pricingSessions.id });
+
+        if (deletedSessions.length > 0) {
+          publishSessionEvent({
+            sessionId: input.id,
+            type: "session_status_changed",
+          });
+        }
 
         return { deleted: deletedSessions.length > 0 };
       }),
@@ -1029,6 +1063,19 @@ export const appRouter = router({
           setCode: item.setCode,
         });
 
+        publishSessionEvent({
+          sessionId: item.sessionId,
+          type: "item_created",
+        });
+        publishSessionEvent({
+          sessionId: item.sessionId,
+          type: "review_changed",
+        });
+        publishSessionEvent({
+          sessionId: item.sessionId,
+          type: "price_changed",
+        });
+
         return serializeSessionItem(item, snapshot);
       }),
     updateItem: publicProcedure
@@ -1072,6 +1119,27 @@ export const appRouter = router({
           setCode: item.setCode,
         });
 
+        publishSessionEvent({
+          sessionId: item.sessionId,
+          type: "item_updated",
+        });
+        if (existingItem.quantity !== item.quantity) {
+          publishSessionEvent({
+            sessionId: item.sessionId,
+            type: "quantity_changed",
+          });
+        }
+        if (reviewReasonFor(existingItem) !== reviewReasonFor(item)) {
+          publishSessionEvent({
+            sessionId: item.sessionId,
+            type: "review_changed",
+          });
+        }
+        publishSessionEvent({
+          sessionId: item.sessionId,
+          type: "price_changed",
+        });
+
         return serializeSessionItem(item, snapshot);
       }),
     confirmItemRarity: publicProcedure
@@ -1094,6 +1162,11 @@ export const appRouter = router({
           .returning();
 
         await updateSessionReviewCount(ctx.db, item.sessionId, now);
+
+        publishSessionEvent({
+          sessionId: item.sessionId,
+          type: "review_changed",
+        });
 
         return serializeSessionItem(item);
       }),
@@ -1136,6 +1209,11 @@ export const appRouter = router({
 
         await updateSessionReviewCount(ctx.db, firstItem.sessionId, now);
 
+        publishSessionEvent({
+          sessionId: firstItem.sessionId,
+          type: "review_changed",
+        });
+
         return { updatedCount: updatedItems.length, rejected: false };
       }),
     refreshItemPricing: publicProcedure
@@ -1160,6 +1238,11 @@ export const appRouter = router({
           .update(sessionItems)
           .set({ updatedAt: new Date() })
           .where(eq(sessionItems.id, item.id));
+
+        publishSessionEvent({
+          sessionId: item.sessionId,
+          type: "price_changed",
+        });
 
         return serializeSessionItem(
           {
@@ -1208,6 +1291,11 @@ export const appRouter = router({
           })
           .where(eq(pricingSessions.id, session.id))
           .returning();
+
+        publishSessionEvent({
+          sessionId: updatedSession.id,
+          type: "session_status_changed",
+        });
 
         return {
           status: "joined" as const,

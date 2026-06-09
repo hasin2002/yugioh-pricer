@@ -4,6 +4,10 @@ import { drizzle } from "drizzle-orm/better-sqlite3";
 
 import { appRouter } from "@/server/api/root";
 import * as schema from "@/server/db/schema";
+import {
+  sessionEventBus,
+  type SessionEvent,
+} from "@/server/session-events";
 
 function createTestCaller() {
   const sqlite = new Database(":memory:");
@@ -645,6 +649,76 @@ describe("appRouter", () => {
       expect(refreshed?.latestPriceSnapshot?.observedAmount).toBe("2.50");
       expect(items[0]?.latestPriceSnapshot?.observedAmount).toBe("2.50");
     } finally {
+      globalThis.fetch = originalFetch;
+      close();
+    }
+  });
+
+  it("publishes session events for item, review, quantity, and price changes", async () => {
+    const events: SessionEvent[] = [];
+    const unsubscribe = sessionEventBus.subscribe((event) => events.push(event));
+    let price = "1.00";
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = async () =>
+      new Response(
+        JSON.stringify({
+          data: [
+            {
+              id: 46986414,
+              card_sets: [
+                {
+                  set_code: "LOB-005",
+                  set_price: price,
+                },
+              ],
+            },
+          ],
+        }),
+      );
+    const { caller, close } = createTestCaller();
+
+    try {
+      const session = await caller.sessions.create();
+      const item = await caller.sessions.addManualItem({
+        id: session.id,
+        cardName: "Dark Magician",
+        setCode: "LOB-005",
+        passcode: "46986414",
+        rarity: "Ultra Rare",
+      });
+      await caller.sessions.updateItem({
+        id: item.id,
+        cardName: "Dark Magician",
+        setCode: "LOB-005",
+        passcode: "46986414",
+        rarity: "Ultra Rare",
+        edition: "1st Edition",
+        language: "English",
+        condition: "Mint",
+        quantity: 2,
+        printingIdentityTrusted: true,
+        rarityConfirmed: false,
+      });
+      await caller.sessions.confirmItemRarity({ id: item.id });
+      price = "2.50";
+      await caller.sessions.refreshItemPricing({ id: item.id });
+
+      expect(
+        events
+          .filter((event) => event.sessionId === session.id)
+          .map((event) => event.type),
+      ).toEqual(
+        expect.arrayContaining([
+          "session_status_changed",
+          "item_created",
+          "item_updated",
+          "quantity_changed",
+          "review_changed",
+          "price_changed",
+        ]),
+      );
+    } finally {
+      unsubscribe();
       globalThis.fetch = originalFetch;
       close();
     }
