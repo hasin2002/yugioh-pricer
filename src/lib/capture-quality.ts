@@ -4,6 +4,7 @@ export type CaptureFrameQuality = {
   edgeScore: number;
   matchedEdges: number;
   signature: string;
+  structureScore: number;
   textureScore: number;
 };
 
@@ -21,6 +22,10 @@ const EDGE_INSET_RATIO = 0.025;
 const EDGE_CONTRAST_THRESHOLD = 24;
 const MIN_BRIGHTNESS = 18;
 const MIN_MATCHED_EDGES = 3;
+const STRUCTURE_CONTRAST_THRESHOLD = 16;
+const MIN_STRUCTURE_MATCHES = 3;
+
+type Rect = ReturnType<typeof captureGuideRect>;
 
 export function captureGuideRect(width: number, height: number) {
   let guideHeight = height * GUIDE_HEIGHT_RATIO;
@@ -47,19 +52,24 @@ export function captureGuideRect(width: number, height: number) {
 
 export function captureFrameQuality(source: PixelSource): CaptureFrameQuality {
   const sample = brightnessSignature(source);
-  const edges = bestCardRectangleEdgeContrasts(source);
-  const matchedEdges = edges.filter((score) => score >= EDGE_CONTRAST_THRESHOLD)
-    .length;
+  const candidate = bestCardCandidate(source);
+  const matchedEdges = candidate.edges.filter(
+    (score) => score >= EDGE_CONTRAST_THRESHOLD,
+  ).length;
   const edgeScore =
-    edges.reduce((total, score) => total + score, 0) / Math.max(1, edges.length);
+    candidate.edges.reduce((total, score) => total + score, 0) /
+    Math.max(1, candidate.edges.length);
   const textureScore = guideTextureScore(source);
 
   return {
     ...sample,
     cardLike:
-      sample.brightness >= MIN_BRIGHTNESS && matchedEdges >= MIN_MATCHED_EDGES,
+      sample.brightness >= MIN_BRIGHTNESS &&
+      matchedEdges >= MIN_MATCHED_EDGES &&
+      candidate.structureMatches >= MIN_STRUCTURE_MATCHES,
     edgeScore,
     matchedEdges,
+    structureScore: candidate.structureScore,
     textureScore,
   };
 }
@@ -87,33 +97,46 @@ function brightnessSignature(source: PixelSource) {
   };
 }
 
-function bestCardRectangleEdgeContrasts(source: PixelSource) {
-  let bestEdges = [0, 0, 0, 0];
+function bestCardCandidate(source: PixelSource) {
+  let bestCandidate = {
+    edges: [0, 0, 0, 0],
+    structureMatches: 0,
+    structureScore: 0,
+  };
   let bestMatchedEdges = 0;
-  let bestScore = 0;
+  let bestCandidateScore = 0;
 
   for (const rect of candidateCardRects(source.width, source.height)) {
     const edges = cardRectEdgeContrasts(source, rect);
     const matchedEdges = edges.filter((score) => score >= EDGE_CONTRAST_THRESHOLD)
       .length;
-    const score = edges.reduce((total, edge) => total + edge, 0);
+    const structure = cardStructureScore(source, rect);
+    const score =
+      matchedEdges * 100 +
+      structure.matches * 80 +
+      edges.reduce((total, edge) => total + edge, 0) +
+      structure.score;
 
     if (
       matchedEdges > bestMatchedEdges ||
-      (matchedEdges === bestMatchedEdges && score > bestScore)
+      (matchedEdges === bestMatchedEdges && score > bestCandidateScore)
     ) {
-      bestEdges = edges;
+      bestCandidate = {
+        edges,
+        structureMatches: structure.matches,
+        structureScore: structure.score,
+      };
       bestMatchedEdges = matchedEdges;
-      bestScore = score;
+      bestCandidateScore = score;
     }
   }
 
-  return bestEdges;
+  return bestCandidate;
 }
 
 function candidateCardRects(width: number, height: number) {
   const guide = captureGuideRect(width, height);
-  const widthScales = [0.72, 0.82, 0.92, 1];
+  const widthScales = [0.72, 0.82, 0.88, 0.94, 1];
   const xShifts = [-0.08, 0, 0.08];
   const yShifts = [-0.08, 0, 0.08];
 
@@ -145,7 +168,7 @@ function candidateCardRects(width: number, height: number) {
   });
 }
 
-function cardRectEdgeContrasts(source: PixelSource, rect: ReturnType<typeof captureGuideRect>) {
+function cardRectEdgeContrasts(source: PixelSource, rect: Rect) {
   const inset = Math.max(
     2,
     Math.round(Math.min(rect.width, rect.height) * EDGE_INSET_RATIO),
@@ -157,6 +180,55 @@ function cardRectEdgeContrasts(source: PixelSource, rect: ReturnType<typeof capt
     horizontalEdgeContrast(source, rect.top, rect.left, rect.right, inset),
     horizontalEdgeContrast(source, rect.bottom, rect.left, rect.right, -inset),
   ];
+}
+
+function cardStructureScore(source: PixelSource, rect: Rect) {
+  const scores = [
+    horizontalInternalContrast(source, rect, 0.16, 0.12, 0.88),
+    horizontalInternalContrast(source, rect, 0.34, 0.14, 0.86),
+    horizontalInternalContrast(source, rect, 0.62, 0.14, 0.86),
+    horizontalInternalContrast(source, rect, 0.75, 0.12, 0.88),
+    horizontalInternalContrast(source, rect, 0.9, 0.12, 0.88),
+    verticalInternalContrast(source, rect, 0.14, 0.26, 0.64),
+    verticalInternalContrast(source, rect, 0.86, 0.26, 0.64),
+  ];
+  const matches = scores.filter((score) => score >= STRUCTURE_CONTRAST_THRESHOLD)
+    .length;
+
+  return {
+    matches,
+    score: scores.reduce((total, score) => total + score, 0),
+  };
+}
+
+function horizontalInternalContrast(
+  source: PixelSource,
+  rect: Rect,
+  relativeY: number,
+  relativeLeft: number,
+  relativeRight: number,
+) {
+  const edgeY = rect.top + rect.height * relativeY;
+  const left = rect.left + rect.width * relativeLeft;
+  const right = rect.left + rect.width * relativeRight;
+  const offset = Math.max(2, Math.round(rect.height * 0.012));
+
+  return horizontalEdgeContrast(source, edgeY, left, right, offset);
+}
+
+function verticalInternalContrast(
+  source: PixelSource,
+  rect: Rect,
+  relativeX: number,
+  relativeTop: number,
+  relativeBottom: number,
+) {
+  const edgeX = rect.left + rect.width * relativeX;
+  const top = rect.top + rect.height * relativeTop;
+  const bottom = rect.top + rect.height * relativeBottom;
+  const offset = Math.max(2, Math.round(rect.width * 0.012));
+
+  return verticalEdgeContrast(source, edgeX, top, bottom, offset);
 }
 
 function guideTextureScore(source: PixelSource) {

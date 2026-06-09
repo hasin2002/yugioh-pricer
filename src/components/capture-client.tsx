@@ -63,12 +63,14 @@ const BURST_FRAME_INTERVAL_MS = 180;
 const STABLE_FRAME_TARGET = 2;
 const SIGNATURE_MOVEMENT_THRESHOLD = 64;
 const MIN_USABLE_BRIGHTNESS = 18;
+const REMOVAL_FRAME_TARGET = 3;
 
 export function CaptureClient() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const lastSignatureRef = useRef<string | null>(null);
+  const removalFrameCountRef = useRef(0);
   const stableFrameCountRef = useRef(0);
   const burstInFlightRef = useRef(false);
   const [captureState, setCaptureState] = useState<CaptureState>("joining");
@@ -186,7 +188,7 @@ export function CaptureClient() {
 
         setCaptureState("captured");
         setMessage(
-          "Captured. Remove this card before scanning the next one, or adjust quantity.",
+          "Captured. Remove this card and scanning will resume automatically.",
         );
       } catch (error) {
         setCaptureState("needs_review");
@@ -422,6 +424,34 @@ export function CaptureClient() {
     return () => window.clearInterval(interval);
   }, [captureBurst, captureState, resetDetection]);
 
+  useEffect(() => {
+    if (captureState !== "captured" && captureState !== "already_captured") {
+      removalFrameCountRef.current = 0;
+      return;
+    }
+
+    const interval = window.setInterval(() => {
+      void watchForCardRemoval();
+    }, DETECTION_INTERVAL_MS);
+
+    async function watchForCardRemoval() {
+      const frame = await captureCandidateFrame(videoRef.current, canvasRef.current);
+
+      if (!frame || !frame.cardLike) {
+        removalFrameCountRef.current += 1;
+      } else {
+        removalFrameCountRef.current = 0;
+      }
+
+      if (removalFrameCountRef.current >= REMOVAL_FRAME_TARGET) {
+        window.clearInterval(interval);
+        resumeDetection();
+      }
+    }
+
+    return () => window.clearInterval(interval);
+  }, [captureState]);
+
   async function replaceActiveClient() {
     if (!joinCode || !clientId) {
       return;
@@ -582,7 +612,7 @@ export function CaptureClient() {
               captureState === "already_captured" ? (
                 <Button className="h-11" type="button" onClick={resumeDetection}>
                   <RotateCcw className="mr-2 h-4 w-4" aria-hidden="true" />
-                  Card removed
+                  Scan next now
                 </Button>
               ) : null}
               {captureState === "detecting" ||

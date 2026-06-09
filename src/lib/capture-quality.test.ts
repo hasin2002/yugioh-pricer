@@ -24,10 +24,10 @@ function fillRect(
   bottom: number,
   value: number,
 ) {
-  const boundedLeft = Math.max(0, left);
-  const boundedTop = Math.max(0, top);
-  const boundedRight = Math.min(width, right);
-  const boundedBottom = Math.min(data.length / width / 4, bottom);
+  const boundedLeft = Math.max(0, Math.floor(left));
+  const boundedTop = Math.max(0, Math.floor(top));
+  const boundedRight = Math.min(width, Math.ceil(right));
+  const boundedBottom = Math.min(data.length / width / 4, Math.ceil(bottom));
 
   for (let y = boundedTop; y < boundedBottom; y += 1) {
     for (let x = boundedLeft; x < boundedRight; x += 1) {
@@ -38,6 +38,60 @@ function fillRect(
       data[offset + 3] = 255;
     }
   }
+}
+
+function drawCard(
+  data: Uint8ClampedArray,
+  width: number,
+  rect: ReturnType<typeof captureGuideRect>,
+  fill = 175,
+) {
+  fillRect(data, width, rect.left, rect.top, rect.right, rect.bottom, fill);
+  fillRect(
+    data,
+    width,
+    rect.left + rect.width * 0.1,
+    rect.top + rect.height * 0.12,
+    rect.right - rect.width * 0.1,
+    rect.top + rect.height * 0.18,
+    55,
+  );
+  fillRect(
+    data,
+    width,
+    rect.left + rect.width * 0.14,
+    rect.top + rect.height * 0.28,
+    rect.right - rect.width * 0.14,
+    rect.top + rect.height * 0.62,
+    65,
+  );
+  fillRect(
+    data,
+    width,
+    rect.left + rect.width * 0.12,
+    rect.top + rect.height * 0.74,
+    rect.right - rect.width * 0.12,
+    rect.top + rect.height * 0.9,
+    230,
+  );
+  fillRect(
+    data,
+    width,
+    rect.left + rect.width * 0.14,
+    rect.top + rect.height * 0.3,
+    rect.left + rect.width * 0.18,
+    rect.top + rect.height * 0.62,
+    220,
+  );
+  fillRect(
+    data,
+    width,
+    rect.right - rect.width * 0.18,
+    rect.top + rect.height * 0.3,
+    rect.right - rect.width * 0.14,
+    rect.top + rect.height * 0.62,
+    220,
+  );
 }
 
 describe("captureFrameQuality", () => {
@@ -88,21 +142,39 @@ describe("captureFrameQuality", () => {
     expect(quality.cardLike).toBe(false);
   });
 
+  it("rejects a rectangular leaflet with text but no card layout", () => {
+    const width = 240;
+    const height = 360;
+    const data = pixels(width, height, 145);
+    const guide = captureGuideRect(width, height);
+
+    fillRect(
+      data,
+      width,
+      guide.left + 8,
+      guide.top + 80,
+      guide.right - 8,
+      guide.bottom - 52,
+      35,
+    );
+
+    for (let row = 0; row < 6; row += 1) {
+      const y = guide.top + 172 + row * 10;
+      fillRect(data, width, guide.left + 28, y, guide.right - 30, y + 4, 230);
+    }
+
+    const quality = captureFrameQuality({ data, width, height });
+
+    expect(quality.cardLike).toBe(false);
+  });
+
   it("accepts a centered portrait card shape inside the capture guide", () => {
     const width = 240;
     const height = 360;
     const data = pixels(width, height, 80);
     const guide = captureGuideRect(width, height);
 
-    fillRect(
-      data,
-      width,
-      guide.left,
-      guide.top,
-      guide.right,
-      guide.bottom,
-      205,
-    );
+    drawCard(data, width, guide, 205);
 
     const quality = captureFrameQuality({ data, width, height });
 
@@ -110,31 +182,20 @@ describe("captureFrameQuality", () => {
     expect(quality.matchedEdges).toBe(4);
   });
 
-  it("accepts card-like art and text texture even when the border is offset", () => {
+  it("accepts a slightly off-center card inside the capture guide", () => {
     const width = 240;
     const height = 360;
     const data = pixels(width, height, 95);
     const guide = captureGuideRect(width, height);
 
-    fillRect(
-      data,
-      width,
-      guide.left - 10,
-      guide.top - 14,
-      guide.right + 12,
-      guide.bottom + 16,
-      175,
-    );
-
-    for (let row = 0; row < 12; row += 1) {
-      const y = guide.top + 28 + row * 14;
-      fillRect(data, width, guide.left + 18, y, guide.right - 18, y + 5, 55);
-    }
-
-    for (let column = 0; column < 6; column += 1) {
-      const x = guide.left + 28 + column * 18;
-      fillRect(data, width, x, guide.top + 80, x + 10, guide.top + 170, 220);
-    }
+    drawCard(data, width, {
+      left: guide.left + 12,
+      top: guide.top + 8,
+      right: guide.right - 6,
+      bottom: guide.bottom - 18,
+      width: guide.width - 18,
+      height: guide.height - 26,
+    });
 
     const quality = captureFrameQuality({ data, width, height });
 
