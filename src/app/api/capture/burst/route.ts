@@ -1,3 +1,5 @@
+import { rm } from "node:fs/promises";
+
 import { and, eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
@@ -15,6 +17,11 @@ import {
   pricingSessions,
   sessionItems,
 } from "@/server/db/schema";
+import {
+  analyzeCardFrame,
+  shouldDiscardNoCardCapture,
+} from "@/server/ocr/card-analysis";
+import { recognizeCardFrame } from "@/server/ocr/pipeline";
 import { publishSessionEvent } from "@/server/session-events";
 
 export const runtime = "nodejs";
@@ -76,8 +83,27 @@ export async function POST(request: Request) {
       });
     }
 
+    const candidateFrameMetrics = candidateFrameMetricsFromFormData(formData);
     const savedBurst = await saveCaptureBurst(candidateFramesFromFormData(formData), {
-      candidateFrameMetrics: candidateFrameMetricsFromFormData(formData),
+      candidateFrameMetrics,
+    });
+    const cardAnalysis = await analyzeCardFrame(savedBurst.bestFrame.storagePath);
+
+    if (shouldDiscardNoCardCapture(cardAnalysis, candidateFrameMetrics)) {
+      await rm(savedBurst.bestFrame.storagePath, { force: true });
+
+      return NextResponse.json(
+        {
+          status: "discarded",
+          reason: "No card was detected in the captured frames.",
+        },
+        { status: 202 },
+      );
+    }
+
+    const ocrResult = await recognizeCardFrame(savedBurst.bestFrame.storagePath, {
+      analysis: cardAnalysis,
+      forceOcr: savedBurst.candidateFrames.some((frame) => frame.cardLike === true),
     });
     const insertedBestFrame = db
       .insert(bestFrames)
@@ -92,13 +118,13 @@ export async function POST(request: Request) {
         bestFrameId: insertedBestFrame.id,
         captureFingerprint,
         entrySource: "capture",
-        cardName: "Captured card",
-        setCode: "Unknown",
-        passcode: "Unknown",
+        cardName: ocrResult.cardNameText ?? "Captured card",
+        setCode: ocrResult.setCodeText ?? "Unknown",
+        passcode: ocrResult.serialNumberText ?? "Unknown",
         rarity: "Unknown",
         rarityConfirmedAt: null,
         printingIdentityTrusted: false,
-        edition: "1st Edition",
+        edition: ocrResult.editionText ?? "1st Edition",
         language: "English",
         condition: "Mint",
         quantity: 1,
@@ -120,7 +146,17 @@ export async function POST(request: Request) {
     db.insert(ocrEvidence)
       .values({
         sessionItemId: item.id,
-        status: "pending",
+        status: ocrResult.status,
+        rawText: ocrResult.rawText,
+        cardNameText: ocrResult.cardNameText,
+        cardNameConfidence: ocrResult.cardNameConfidence,
+        setCodeText: ocrResult.setCodeText,
+        setCodeConfidence: ocrResult.setCodeConfidence,
+        editionText: ocrResult.editionText,
+        editionConfidence: ocrResult.editionConfidence,
+        serialNumberText: ocrResult.serialNumberText,
+        serialNumberConfidence: ocrResult.serialNumberConfidence,
+        sourceRegions: JSON.stringify(ocrResult.sourceRegions),
         createdAt: now,
         updatedAt: now,
       })

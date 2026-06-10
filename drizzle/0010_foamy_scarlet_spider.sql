@@ -1,0 +1,1 @@
+ALTER TABLE `ocr_evidence` ADD `source_regions` text;

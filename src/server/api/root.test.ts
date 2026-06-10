@@ -109,6 +109,7 @@ function createTestCaller() {
       edition_confidence integer,
       serial_number_text text,
       serial_number_confidence integer,
+      source_regions text,
       created_at integer DEFAULT (unixepoch()) NOT NULL,
       updated_at integer DEFAULT (unixepoch()) NOT NULL
     );
@@ -489,6 +490,7 @@ describe("appRouter", () => {
       await db.insert(schema.ocrEvidence).values({
         sessionItemId: item.id,
         status: "pending",
+        sourceRegions: "{\"regions\":[]}",
       });
 
       const [workspaceItem] = await caller.sessions.items({ id: session.id });
@@ -530,6 +532,7 @@ describe("appRouter", () => {
         setCodeText: null,
         editionText: null,
         serialNumberText: null,
+        sourceRegions: "{\"regions\":[]}",
       });
     } finally {
       close();

@@ -814,6 +814,7 @@ function serializeOcrEvidence(evidence: OcrEvidence | null) {
     editionConfidence: evidence.editionConfidence,
     serialNumberText: evidence.serialNumberText,
     serialNumberConfidence: evidence.serialNumberConfidence,
+    sourceRegions: evidence.sourceRegions,
     createdAt: evidence.createdAt.toISOString(),
     updatedAt: evidence.updatedAt.toISOString(),
   };
