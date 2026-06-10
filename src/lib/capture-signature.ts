@@ -32,6 +32,17 @@ export function capturedSceneResetKind(
   return frame.cardLike ? "different_card" : "card_removed";
 }
 
+export function isCapturedCardPullAwayFrame(
+  frame: CaptureSignatureFrame,
+  capturedSignature: string | null,
+  movementThreshold: number,
+) {
+  return (
+    capturedSceneResetKind(frame, capturedSignature, movementThreshold) ===
+    "card_removed"
+  );
+}
+
 export function isCapturedSceneResetFrame(
   frame: CaptureSignatureFrame,
   capturedSignature: string | null,

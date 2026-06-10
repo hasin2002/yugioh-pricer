@@ -28,9 +28,8 @@ import {
 } from "@/lib/capture-state";
 import { captureFrameQuality } from "@/lib/capture-quality";
 import {
-  capturedSceneResetKind,
+  isCapturedCardPullAwayFrame,
   signatureDistance,
-  type CapturedSceneResetKind,
 } from "@/lib/capture-signature";
 import { cn } from "@/lib/utils";
 
@@ -64,8 +63,7 @@ const STABLE_FRAME_TARGET = 2;
 const SIGNATURE_MOVEMENT_THRESHOLD = 64;
 const CAPTURED_SCENE_CHANGE_THRESHOLD = 72;
 const MIN_USABLE_BRIGHTNESS = 18;
-const CAPTURED_CARD_REMOVED_FRAME_TARGET = 2;
-const CAPTURED_DIFFERENT_CARD_FRAME_TARGET = 2;
+const CAPTURED_PULL_AWAY_FRAME_TARGET = 2;
 
 export function CaptureClient() {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -74,7 +72,6 @@ export function CaptureClient() {
   const lastSignatureRef = useRef<string | null>(null);
   const capturedSignatureRef = useRef<string | null>(null);
   const capturedResetFrameCountRef = useRef(0);
-  const capturedResetKindRef = useRef<CapturedSceneResetKind | null>(null);
   const stableFrameCountRef = useRef(0);
   const burstInFlightRef = useRef(false);
   const [captureState, setCaptureState] = useState<CaptureState>("joining");
@@ -435,7 +432,6 @@ export function CaptureClient() {
   useEffect(() => {
     if (captureState !== "captured" && captureState !== "already_captured") {
       capturedResetFrameCountRef.current = 0;
-      capturedResetKindRef.current = null;
       return;
     }
 
@@ -445,31 +441,19 @@ export function CaptureClient() {
 
     async function watchForCardRemoval() {
       const frame = await captureCandidateFrame(videoRef.current, canvasRef.current);
-      const resetKind = capturedSceneResetKind(
+      const cardPulledAway = isCapturedCardPullAwayFrame(
         frame,
         capturedSignatureRef.current,
         CAPTURED_SCENE_CHANGE_THRESHOLD,
       );
 
-      if (resetKind && resetKind === capturedResetKindRef.current) {
+      if (cardPulledAway) {
         capturedResetFrameCountRef.current += 1;
-      } else if (resetKind) {
-        capturedResetKindRef.current = resetKind;
-        capturedResetFrameCountRef.current = 1;
       } else {
-        capturedResetKindRef.current = null;
         capturedResetFrameCountRef.current = 0;
       }
 
-      const resetFrameTarget =
-        resetKind === "different_card"
-          ? CAPTURED_DIFFERENT_CARD_FRAME_TARGET
-          : CAPTURED_CARD_REMOVED_FRAME_TARGET;
-
-      if (
-        resetKind &&
-        capturedResetFrameCountRef.current >= resetFrameTarget
-      ) {
+      if (capturedResetFrameCountRef.current >= CAPTURED_PULL_AWAY_FRAME_TARGET) {
         window.clearInterval(interval);
         resumeDetection();
       }
@@ -534,7 +518,6 @@ export function CaptureClient() {
     resetDetection();
     capturedSignatureRef.current = null;
     capturedResetFrameCountRef.current = 0;
-    capturedResetKindRef.current = null;
     setCapturedItem(null);
     setCaptureState("detecting");
     setMessage("Detecting the next card.");

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   capturedSceneResetKind,
+  isCapturedCardPullAwayFrame,
   isCapturedSceneResetFrame,
   signatureDistance,
 } from "@/lib/capture-signature";
@@ -35,6 +36,42 @@ describe("capturedSceneResetKind", () => {
     expect(
       capturedSceneResetKind({ cardLike: true, signature: "89ab" }, "0123", 4),
     ).toBe("different_card");
+  });
+});
+
+describe("isCapturedCardPullAwayFrame", () => {
+  it("requires the card to leave the guide before auto scanning can resume", () => {
+    expect(
+      isCapturedCardPullAwayFrame(
+        { cardLike: false, signature: "89ab" },
+        "0123",
+        4,
+      ),
+    ).toBe(true);
+    expect(
+      isCapturedCardPullAwayFrame(
+        { cardLike: true, signature: "89ab" },
+        "0123",
+        4,
+      ),
+    ).toBe(false);
+  });
+
+  it("does not count same-card wrist movement as pull-away", () => {
+    expect(
+      isCapturedCardPullAwayFrame(
+        { cardLike: true, signature: "0124" },
+        "0123",
+        4,
+      ),
+    ).toBe(false);
+    expect(
+      isCapturedCardPullAwayFrame(
+        { cardLike: false, signature: "0123" },
+        "0123",
+        4,
+      ),
+    ).toBe(false);
   });
 });
 
