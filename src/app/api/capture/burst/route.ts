@@ -20,7 +20,12 @@ import {
 import {
   analyzeCardFrame,
   shouldDiscardNoCardCapture,
+  shouldDiscardUnidentifiedCapture,
 } from "@/server/ocr/card-analysis";
+import {
+  captureIdentityFromOcr,
+  type CaptureIdentity,
+} from "@/server/ocr/capture-identity";
 import { recognizeCardFrame } from "@/server/ocr/pipeline";
 import { publishSessionEvent } from "@/server/session-events";
 
@@ -105,8 +110,23 @@ export async function POST(request: Request) {
       analysis: cardAnalysis,
       forceOcr: savedBurst.candidateFrames.some((frame) => frame.cardLike === true),
     });
+
+    if (shouldDiscardUnidentifiedCapture(cardAnalysis, ocrResult)) {
+      await rm(savedBurst.bestFrame.storagePath, { force: true });
+
+      return NextResponse.json(
+        {
+          status: "discarded",
+          reason: "No card was detected in the captured frames.",
+        },
+        { status: 202 },
+      );
+    }
+
+    const captureIdentity = await captureIdentityFromOcr(db, ocrResult);
     const now = new Date();
     const persisted = await persistCapturedBurst({
+      captureIdentity,
       captureFingerprint,
       now,
       ocrResult,
@@ -162,6 +182,7 @@ function captureItemResponse(item: typeof sessionItems.$inferSelect) {
 }
 
 type PersistCapturedBurstInput = {
+  captureIdentity: CaptureIdentity;
   captureFingerprint: string;
   now: Date;
   ocrResult: Awaited<ReturnType<typeof recognizeCardFrame>>;
@@ -170,6 +191,7 @@ type PersistCapturedBurstInput = {
 };
 
 async function persistCapturedBurst({
+  captureIdentity,
   captureFingerprint,
   now,
   ocrResult,
@@ -190,13 +212,13 @@ async function persistCapturedBurst({
           bestFrameId: insertedBestFrame.id,
           captureFingerprint,
           entrySource: "capture",
-          cardName: ocrResult.cardNameText ?? "Captured card",
-          setCode: ocrResult.setCodeText ?? "Unknown",
-          passcode: ocrResult.serialNumberText ?? "Unknown",
+          cardName: captureIdentity.cardName,
+          setCode: captureIdentity.setCode,
+          passcode: captureIdentity.passcode,
           rarity: "Unknown",
           rarityConfirmedAt: null,
           printingIdentityTrusted: false,
-          edition: ocrResult.editionText ?? "1st Edition",
+          edition: captureIdentity.edition,
           language: "English",
           condition: "Mint",
           quantity: 1,

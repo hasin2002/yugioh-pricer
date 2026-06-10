@@ -175,7 +175,7 @@ export function CaptureClient() {
         const body = (await response.json()) as BurstUploadResponse;
 
         if (response.ok && body.status === "discarded") {
-          setCaptureState("needs_review");
+          setCaptureState("detecting");
           setMessage(
             body.reason ??
               "No card was found in that burst. Align one card inside the outline.",

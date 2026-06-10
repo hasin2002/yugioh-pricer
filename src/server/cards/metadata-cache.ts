@@ -69,6 +69,11 @@ export type CardMetadataSearchResult = {
   pricingStatus: "requires_pricing";
 };
 
+export type CardMetadataNameMatch = {
+  passcode: string;
+  name: string;
+};
+
 function normalizeSearchValue(value: string) {
   return value.trim().toLowerCase();
 }
@@ -277,6 +282,28 @@ export async function searchCardMetadata(
     metadataOnly: true,
     pricingStatus: "requires_pricing",
   }));
+}
+
+export async function findExactCardMetadataByName(
+  db: Db,
+  name: string,
+): Promise<CardMetadataNameMatch | null> {
+  const normalizedName = normalizeSearchValue(name);
+
+  if (!normalizedName) {
+    return null;
+  }
+
+  const rows = await db
+    .select({
+      passcode: cardMetadataCards.passcode,
+      name: cardMetadataCards.name,
+    })
+    .from(cardMetadataCards)
+    .where(eq(cardMetadataCards.normalizedName, normalizedName))
+    .limit(2);
+
+  return rows.length === 1 ? rows[0]! : null;
 }
 
 export function refreshCardMetadataOnServerStart(db: Db) {

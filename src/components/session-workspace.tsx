@@ -1052,7 +1052,7 @@ function ScanDetails({ item }: { item: SessionItem }) {
   const hasOcrFieldValue = ocrFields.some((field) => field.value);
 
   return (
-    <details className="rounded-lg border bg-background p-3 text-sm">
+    <details open className="rounded-lg border bg-background p-3 text-sm">
       <summary className="flex cursor-pointer list-none items-center justify-between gap-3">
         <span className="flex min-w-0 items-center gap-2 font-bold">
           <ScanSearch className="h-4 w-4 shrink-0" aria-hidden="true" />

@@ -72,7 +72,9 @@ export function extractOcrCandidates(
       }
       case "serialNumber": {
         for (const serialNumber of serialNumberCandidates(text)) {
-          candidates.serialNumber.push(candidate(serialNumber, confidence, image));
+          candidates.serialNumber.push(
+            candidate(serialNumber, serialNumberConfidence(confidence), image),
+          );
         }
         break;
       }
@@ -170,7 +172,7 @@ export function setCodeCandidates(text: string) {
     .replace(/[^A-Z0-9.\-\s]/g, " ");
   const candidates = new Set<string>();
   const pattern =
-    /(?:^|[^A-Z0-9])([A-Z0-9]{2,6})\s*[-.]?\s*EN\s*([A-Z0-9]{2,5})(?=$|[^A-Z0-9])/g;
+    /(?:^|[^A-Z0-9])([A-Z0-9]{2,6})\s*[-.]?\s*EN\s*([A-Z0-9]{3,5})(?=$|[^A-Z0-9])/g;
   let match: RegExpExecArray | null;
 
   while ((match = pattern.exec(normalized)) !== null) {
@@ -180,7 +182,7 @@ export function setCodeCandidates(text: string) {
       .replace(/[IL]/g, "1")
       .replace(/S/g, "5");
 
-    if (/^\d{2,5}$/.test(suffix)) {
+    if (/^\d{3,5}$/.test(suffix)) {
       candidates.add(`${prefix}-EN${suffix}`);
     }
   }
@@ -213,7 +215,7 @@ export function serialNumberCandidates(text: string) {
     .replace(/[IL|]/g, "1")
     .replace(/S/g, "5");
   const candidates = new Set<string>();
-  const pattern = /\d{5,9}/g;
+  const pattern = /\d{8}/g;
   let match: RegExpExecArray | null;
 
   while ((match = pattern.exec(normalized)) !== null) {
@@ -225,6 +227,14 @@ export function serialNumberCandidates(text: string) {
   }
 
   return [...candidates].sort((left, right) => right.length - left.length);
+}
+
+function serialNumberConfidence(confidence: number | null) {
+  if (confidence === null) {
+    return null;
+  }
+
+  return Math.min(confidence, 80);
 }
 
 function bestCandidate(

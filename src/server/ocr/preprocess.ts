@@ -78,9 +78,18 @@ const REGION_TEMPLATES: RegionTemplate[] = [
     psm: 7,
     whitelist: SERIAL_NUMBER_WHITELIST,
   },
+  {
+    id: "serial-number-bottom-left-wide",
+    field: "serialNumber",
+    label: "Wide Serial Number on bottom-left strip",
+    relativeBox: { left: 0, top: 0.885, width: 0.34, height: 0.09 },
+    psm: 7,
+    whitelist: SERIAL_NUMBER_WHITELIST,
+  },
 ];
 
-const VARIANTS = ["color", "gray-contrast", "threshold"] as const;
+const BASE_VARIANTS = ["color", "gray-contrast", "threshold"] as const;
+const SERIAL_VARIANTS = [...BASE_VARIANTS, "serial-contrast"] as const;
 
 export type PreparedOcrImages = {
   images: PreparedOcrImage[];
@@ -98,7 +107,7 @@ export async function prepareOcrImages(
     for (const template of REGION_TEMPLATES) {
       const region = regionFromTemplate(template, analysis);
 
-      for (const variantName of VARIANTS) {
+      for (const variantName of variantsForField(region.field)) {
         const targetWidth = targetWidthForField(region.field);
         const targetHeight = Math.max(
           48,
@@ -132,6 +141,14 @@ export async function prepareOcrImages(
             .threshold(142)
             .png()
             .toFile(outputPath);
+        } else if (variantName === "serial-contrast") {
+          await pipeline
+            .grayscale()
+            .normalize()
+            .linear(1.8, -70)
+            .sharpen({ sigma: 1 })
+            .png()
+            .toFile(outputPath);
         } else {
           await pipeline
             .modulate({ brightness: 1.06, saturation: 0.65 })
@@ -163,6 +180,10 @@ export async function prepareOcrImages(
     await rm(directory, { recursive: true, force: true });
     throw error;
   }
+}
+
+function variantsForField(field: OcrField) {
+  return field === "serialNumber" ? SERIAL_VARIANTS : BASE_VARIANTS;
 }
 
 function regionFromTemplate(
@@ -211,11 +232,11 @@ function clampBox(box: OcrBox, imageWidth: number, imageHeight: number): OcrBox 
 function targetWidthForField(field: OcrField) {
   switch (field) {
     case "cardName":
+    case "serialNumber":
       return 1400;
     case "setCode":
       return 900;
     case "edition":
-    case "serialNumber":
       return 1000;
   }
 }

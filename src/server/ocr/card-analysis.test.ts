@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { shouldDiscardNoCardCapture } from "@/server/ocr/card-analysis";
+import {
+  shouldDiscardNoCardCapture,
+  shouldDiscardUnidentifiedCapture,
+} from "@/server/ocr/card-analysis";
 import type { CandidateFrameMetrics } from "@/server/capture/burst";
-import type { CardFrameAnalysis } from "@/server/ocr/types";
+import type { CardFrameAnalysis, OcrPipelineResult } from "@/server/ocr/types";
 
 describe("shouldDiscardNoCardCapture", () => {
   it("discards only when client and server both see no card", () => {
@@ -41,6 +44,64 @@ describe("shouldDiscardNoCardCapture", () => {
   });
 });
 
+describe("shouldDiscardUnidentifiedCapture", () => {
+  it("discards weak card-shaped frames when OCR found no usable candidates", () => {
+    expect(
+      shouldDiscardUnidentifiedCapture(
+        serverAnalysis({
+          cardLike: true,
+          matchedEdges: 3,
+          structureScore: 152,
+          textureScore: 24,
+        }),
+        ocrResult(),
+      ),
+    ).toBe(true);
+  });
+
+  it("keeps strong unidentified captures reviewable", () => {
+    expect(
+      shouldDiscardUnidentifiedCapture(
+        serverAnalysis({
+          cardLike: true,
+          matchedEdges: 3,
+          structureScore: 208,
+          textureScore: 37,
+        }),
+        ocrResult(),
+      ),
+    ).toBe(false);
+  });
+
+  it("keeps weak captures reviewable when OCR found any field candidate", () => {
+    expect(
+      shouldDiscardUnidentifiedCapture(
+        serverAnalysis({
+          cardLike: true,
+          matchedEdges: 3,
+          structureScore: 152,
+          textureScore: 24,
+        }),
+        ocrResult({ cardNameText: "ROYAL STRAIGHT" }),
+      ),
+    ).toBe(false);
+  });
+
+  it("keeps weak captures reviewable when OCR did not run", () => {
+    expect(
+      shouldDiscardUnidentifiedCapture(
+        serverAnalysis({
+          cardLike: true,
+          matchedEdges: 3,
+          structureScore: 152,
+          textureScore: 24,
+        }),
+        ocrResult({ status: "engine_unavailable" }),
+      ),
+    ).toBe(false);
+  });
+});
+
 function metric(cardLike: boolean): CandidateFrameMetrics {
   return {
     cardLike,
@@ -63,6 +124,28 @@ function serverAnalysis(
     textureScore: 10,
     imageWidth: 240,
     imageHeight: 360,
+    ...overrides,
+  };
+}
+
+function ocrResult(
+  overrides: Partial<
+    Pick<
+      OcrPipelineResult,
+      | "status"
+      | "cardNameText"
+      | "setCodeText"
+      | "editionText"
+      | "serialNumberText"
+    >
+  > = {},
+) {
+  return {
+    status: "needs_review" as const,
+    cardNameText: null,
+    setCodeText: null,
+    editionText: null,
+    serialNumberText: null,
     ...overrides,
   };
 }

@@ -2,7 +2,7 @@ import sharp from "sharp";
 
 import { captureFrameQuality } from "@/lib/capture-quality";
 import type { CandidateFrameMetrics } from "@/server/capture/burst";
-import type { CardFrameAnalysis } from "@/server/ocr/types";
+import type { CardFrameAnalysis, OcrPipelineResult } from "@/server/ocr/types";
 
 export async function analyzeCardFrame(imagePath: string): Promise<CardFrameAnalysis> {
   const { data, info } = await sharp(imagePath)
@@ -51,4 +51,33 @@ export function shouldDiscardNoCardCapture(
     (clientConfidentlyNoCard && serverClearlyNoCard) ||
     (knownClientMetrics.length === 0 && serverExtremelyNoCard)
   );
+}
+
+export function shouldDiscardUnidentifiedCapture(
+  analysis: CardFrameAnalysis,
+  ocrResult: Pick<
+    OcrPipelineResult,
+    | "status"
+    | "cardNameText"
+    | "setCodeText"
+    | "editionText"
+    | "serialNumberText"
+  >,
+) {
+  if (ocrResult.status !== "needs_review") {
+    return false;
+  }
+
+  const hasOcrCandidate = Boolean(
+    ocrResult.cardNameText ||
+      ocrResult.setCodeText ||
+      ocrResult.editionText ||
+      ocrResult.serialNumberText,
+  );
+  const weakServerCardShape =
+    analysis.matchedEdges <= 3 &&
+    analysis.structureScore < 175 &&
+    analysis.textureScore < 30;
+
+  return !hasOcrCandidate && weakServerCardShape;
 }

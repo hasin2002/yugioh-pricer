@@ -11,11 +11,17 @@ describe("setCodeCandidates", () => {
   it("normalizes common OCR mistakes in the numeric suffix", () => {
     expect(setCodeCandidates("BLCR-ENO22")).toContain("BLCR-EN022");
   });
+
+  it("rejects short text-fragment matches from non-set-code regions", () => {
+    expect(setCodeCandidates("Token is in the N15 Special Summon")).toEqual([]);
+    expect(setCodeCandidates("TOK-EN15")).toEqual([]);
+  });
 });
 
 describe("serialNumberCandidates", () => {
-  it("extracts plausible Serial Number digit runs", () => {
-    expect(serialNumberCandidates("273572 1st Edition")).toEqual(["273572"]);
+  it("extracts only full 8-digit Serial Number candidates", () => {
+    expect(serialNumberCandidates("58415502 1st Edition")).toEqual(["58415502"]);
+    expect(serialNumberCandidates("41556 1st Edition")).toEqual([]);
   });
 });
 
@@ -47,14 +53,15 @@ describe("extractOcrCandidates", () => {
       },
       {
         imageId: "serial-number-bottom-left:gray-contrast",
-        observations: [{ text: "273572 1st Edition", confidence: 72 }],
+        observations: [{ text: "58415502 1st Edition", confidence: 92 }],
       },
     ]);
 
     expect(result.cardNameText).toBe("CRYSTAL SKULL");
     expect(result.setCodeText).toBe("BLCR-EN022");
     expect(result.editionText).toBe("1st Edition");
-    expect(result.serialNumberText).toBe("273572");
+    expect(result.serialNumberText).toBe("58415502");
+    expect(result.serialNumberConfidence).toBe(80);
     expect(result.rawText).toContain("[title-band gray-contrast]");
   });
 
