@@ -4,6 +4,7 @@ import { drizzle } from "drizzle-orm/better-sqlite3";
 
 import {
   ensureCardMetadataFresh,
+  findExactCardMetadataByName,
   getCardMetadataStatus,
   refreshCardMetadataCache,
   searchCardMetadata,
@@ -164,6 +165,26 @@ describe("card metadata cache", () => {
         setName: "Legend of Blue Eyes White Dragon",
         rarity: "Ultra Rare",
       });
+    } finally {
+      close();
+    }
+  });
+
+  it("finds an exact card-name metadata match for OCR identity recovery", async () => {
+    const { db, close } = createTestDb();
+
+    try {
+      await refreshCardMetadataCache(db, { fetcher: createFetchMock() });
+
+      await expect(
+        findExactCardMetadataByName(db, "DARK MAGICIAN"),
+      ).resolves.toEqual({
+        name: "Dark Magician",
+        passcode: "46986414",
+      });
+      await expect(
+        findExactCardMetadataByName(db, "dark magic"),
+      ).resolves.toBeNull();
     } finally {
       close();
     }

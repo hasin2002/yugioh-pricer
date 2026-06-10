@@ -1,3 +1,5 @@
+import { rm } from "node:fs/promises";
+
 import { and, eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
@@ -15,6 +17,16 @@ import {
   pricingSessions,
   sessionItems,
 } from "@/server/db/schema";
+import {
+  analyzeCardFrame,
+  shouldDiscardNoCardCapture,
+  shouldDiscardUnidentifiedCapture,
+} from "@/server/ocr/card-analysis";
+import {
+  captureIdentityFromOcr,
+  type CaptureIdentity,
+} from "@/server/ocr/capture-identity";
+import { recognizeCardFrame } from "@/server/ocr/pipeline";
 import { publishSessionEvent } from "@/server/session-events";
 
 export const runtime = "nodejs";
@@ -76,63 +88,52 @@ export async function POST(request: Request) {
       });
     }
 
+    const candidateFrameMetrics = candidateFrameMetricsFromFormData(formData);
     const savedBurst = await saveCaptureBurst(candidateFramesFromFormData(formData), {
-      candidateFrameMetrics: candidateFrameMetricsFromFormData(formData),
+      candidateFrameMetrics,
     });
-    const insertedBestFrame = db
-      .insert(bestFrames)
-      .values(savedBurst.bestFrame)
-      .returning()
-      .get();
+    const cardAnalysis = await analyzeCardFrame(savedBurst.bestFrame.storagePath);
+
+    if (shouldDiscardNoCardCapture(cardAnalysis, candidateFrameMetrics)) {
+      await rm(savedBurst.bestFrame.storagePath, { force: true });
+
+      return NextResponse.json(
+        {
+          status: "discarded",
+          reason: "No card was detected in the captured frames.",
+        },
+        { status: 202 },
+      );
+    }
+
+    const ocrResult = await recognizeCardFrame(savedBurst.bestFrame.storagePath, {
+      analysis: cardAnalysis,
+      forceOcr: savedBurst.candidateFrames.some((frame) => frame.cardLike === true),
+    });
+
+    if (shouldDiscardUnidentifiedCapture(cardAnalysis, ocrResult)) {
+      await rm(savedBurst.bestFrame.storagePath, { force: true });
+
+      return NextResponse.json(
+        {
+          status: "discarded",
+          reason: "No card was detected in the captured frames.",
+        },
+        { status: 202 },
+      );
+    }
+
+    const captureIdentity = await captureIdentityFromOcr(db, ocrResult);
     const now = new Date();
-    const item = db
-      .insert(sessionItems)
-      .values({
-        sessionId: session.id,
-        bestFrameId: insertedBestFrame.id,
-        captureFingerprint,
-        entrySource: "capture",
-        cardName: "Captured card",
-        setCode: "Unknown",
-        passcode: "Unknown",
-        rarity: "Unknown",
-        rarityConfirmedAt: null,
-        printingIdentityTrusted: false,
-        edition: "1st Edition",
-        language: "English",
-        condition: "Mint",
-        quantity: 1,
-        createdAt: now,
-        updatedAt: now,
-      })
-      .returning()
-      .get();
-
-    db.insert(captureCandidateFrames)
-      .values(
-        savedBurst.candidateFrames.map((candidateFrame) => ({
-          sessionItemId: item.id,
-          ...candidateFrame,
-          createdAt: now,
-        })),
-      )
-      .run();
-    db.insert(ocrEvidence)
-      .values({
-        sessionItemId: item.id,
-        status: "pending",
-        createdAt: now,
-        updatedAt: now,
-      })
-      .run();
-
-    db.update(pricingSessions)
-      .set({
-        reviewCount: session.reviewCount + 1,
-        updatedAt: now,
-      })
-      .where(eq(pricingSessions.id, session.id))
-      .run();
+    const persisted = await persistCapturedBurst({
+      captureIdentity,
+      captureFingerprint,
+      now,
+      ocrResult,
+      savedBurst,
+      session,
+    });
+    const { insertedBestFrame, item } = persisted;
 
     publishSessionEvent({ sessionId: session.id, type: "item_created" });
     publishSessionEvent({ sessionId: session.id, type: "review_changed" });
@@ -159,6 +160,8 @@ export async function POST(request: Request) {
       );
     }
 
+    console.error("Capture burst upload failed", error);
+
     return NextResponse.json(
       { error: "The capture burst could not be uploaded. Try again." },
       { status: 500 },
@@ -176,4 +179,95 @@ function captureItemResponse(item: typeof sessionItems.$inferSelect) {
     quantity: item.quantity,
     reviewStatus: "requires_review" as const,
   };
+}
+
+type PersistCapturedBurstInput = {
+  captureIdentity: CaptureIdentity;
+  captureFingerprint: string;
+  now: Date;
+  ocrResult: Awaited<ReturnType<typeof recognizeCardFrame>>;
+  savedBurst: Awaited<ReturnType<typeof saveCaptureBurst>>;
+  session: typeof pricingSessions.$inferSelect;
+};
+
+async function persistCapturedBurst({
+  captureIdentity,
+  captureFingerprint,
+  now,
+  ocrResult,
+  savedBurst,
+  session,
+}: PersistCapturedBurstInput) {
+  try {
+    return db.transaction((tx) => {
+      const insertedBestFrame = tx
+        .insert(bestFrames)
+        .values(savedBurst.bestFrame)
+        .returning()
+        .get();
+      const item = tx
+        .insert(sessionItems)
+        .values({
+          sessionId: session.id,
+          bestFrameId: insertedBestFrame.id,
+          captureFingerprint,
+          entrySource: "capture",
+          cardName: captureIdentity.cardName,
+          setCode: captureIdentity.setCode,
+          passcode: captureIdentity.passcode,
+          rarity: "Unknown",
+          rarityConfirmedAt: null,
+          printingIdentityTrusted: false,
+          edition: captureIdentity.edition,
+          language: "English",
+          condition: "Mint",
+          quantity: 1,
+          createdAt: now,
+          updatedAt: now,
+        })
+        .returning()
+        .get();
+
+      tx.insert(captureCandidateFrames)
+        .values(
+          savedBurst.candidateFrames.map((candidateFrame) => ({
+            sessionItemId: item.id,
+            ...candidateFrame,
+            createdAt: now,
+          })),
+        )
+        .run();
+      tx.insert(ocrEvidence)
+        .values({
+          sessionItemId: item.id,
+          status: ocrResult.status,
+          rawText: ocrResult.rawText,
+          cardNameText: ocrResult.cardNameText,
+          cardNameConfidence: ocrResult.cardNameConfidence,
+          setCodeText: ocrResult.setCodeText,
+          setCodeConfidence: ocrResult.setCodeConfidence,
+          editionText: ocrResult.editionText,
+          editionConfidence: ocrResult.editionConfidence,
+          serialNumberText: ocrResult.serialNumberText,
+          serialNumberConfidence: ocrResult.serialNumberConfidence,
+          sourceRegions: JSON.stringify(ocrResult.sourceRegions),
+          createdAt: now,
+          updatedAt: now,
+        })
+        .run();
+
+      tx.update(pricingSessions)
+        .set({
+          reviewCount: session.reviewCount + 1,
+          updatedAt: now,
+        })
+        .where(eq(pricingSessions.id, session.id))
+        .run();
+
+      return { insertedBestFrame, item };
+    });
+  } catch (error) {
+    await rm(savedBurst.bestFrame.storagePath, { force: true });
+    throw error;
+  }
 }

@@ -1,6 +1,7 @@
 export type CaptureFrameQuality = {
   brightness: number;
   cardLike: boolean;
+  cardRect: CaptureCardRect;
   edgeScore: number;
   matchedEdges: number;
   signature: string;
@@ -9,7 +10,16 @@ export type CaptureFrameQuality = {
 };
 
 type PixelSource = {
-  data: Uint8ClampedArray | number[];
+  data: Uint8Array | Uint8ClampedArray | number[];
+  width: number;
+  height: number;
+};
+
+export type CaptureCardRect = {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
   width: number;
   height: number;
 };
@@ -69,6 +79,7 @@ export function captureFrameQuality(source: PixelSource): CaptureFrameQuality {
       matchedEdges >= MIN_MATCHED_EDGES &&
       candidate.structureMatches >= MIN_STRUCTURE_MATCHES &&
       textureScore >= MIN_TEXTURE_SCORE,
+    cardRect: candidate.rect,
     edgeScore,
     matchedEdges,
     structureScore: candidate.structureScore,
@@ -102,6 +113,7 @@ function brightnessSignature(source: PixelSource) {
 function bestCardCandidate(source: PixelSource) {
   let bestCandidate = {
     edges: [0, 0, 0, 0],
+    rect: captureGuideRect(source.width, source.height),
     structureMatches: 0,
     structureScore: 0,
   };
@@ -125,6 +137,7 @@ function bestCardCandidate(source: PixelSource) {
     ) {
       bestCandidate = {
         edges,
+        rect,
         structureMatches: structure.matches,
         structureScore: structure.score,
       };

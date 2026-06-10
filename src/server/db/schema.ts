@@ -133,6 +133,7 @@ export const ocrEvidence = sqliteTable("ocr_evidence", {
   editionConfidence: integer("edition_confidence"),
   serialNumberText: text("serial_number_text"),
   serialNumberConfidence: integer("serial_number_confidence"),
+  sourceRegions: text("source_regions"),
   createdAt: integer("created_at", { mode: "timestamp" })
     .default(sql`(unixepoch())`)
     .notNull(),

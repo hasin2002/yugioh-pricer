@@ -48,9 +48,10 @@ type CapturedItem = {
   quantity: number;
 };
 type BurstUploadResponse = {
-  status?: "captured" | "already_captured";
+  status?: "captured" | "already_captured" | "discarded";
   item?: CapturedItem;
   error?: string;
+  reason?: string;
 };
 
 const SECURE_CONTEXT_ERROR =
@@ -172,6 +173,20 @@ export function CaptureClient() {
           body: formData,
         });
         const body = (await response.json()) as BurstUploadResponse;
+
+        if (response.ok && body.status === "discarded") {
+          setCaptureState("detecting");
+          setMessage(
+            body.reason ??
+              "No card was found in that burst. Align one card inside the outline.",
+          );
+          window.setTimeout(() => {
+            resetDetection();
+            setCaptureState("detecting");
+            setMessage("Detecting the next card.");
+          }, 1000);
+          return;
+        }
 
         if (!response.ok || !body.item) {
           throw new Error(

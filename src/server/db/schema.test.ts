@@ -71,6 +71,7 @@ describe("database schema", () => {
     expect(ocrEvidence.setCodeText.name).toBe("set_code_text");
     expect(ocrEvidence.editionText.name).toBe("edition_text");
     expect(ocrEvidence.serialNumberText.name).toBe("serial_number_text");
+    expect(ocrEvidence.sourceRegions.name).toBe("source_regions");
   });
 
   it("defines price snapshots for session items", () => {
