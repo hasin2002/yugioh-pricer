@@ -105,70 +105,15 @@ export async function POST(request: Request) {
       analysis: cardAnalysis,
       forceOcr: savedBurst.candidateFrames.some((frame) => frame.cardLike === true),
     });
-    const insertedBestFrame = db
-      .insert(bestFrames)
-      .values(savedBurst.bestFrame)
-      .returning()
-      .get();
     const now = new Date();
-    const item = db
-      .insert(sessionItems)
-      .values({
-        sessionId: session.id,
-        bestFrameId: insertedBestFrame.id,
-        captureFingerprint,
-        entrySource: "capture",
-        cardName: ocrResult.cardNameText ?? "Captured card",
-        setCode: ocrResult.setCodeText ?? "Unknown",
-        passcode: ocrResult.serialNumberText ?? "Unknown",
-        rarity: "Unknown",
-        rarityConfirmedAt: null,
-        printingIdentityTrusted: false,
-        edition: ocrResult.editionText ?? "1st Edition",
-        language: "English",
-        condition: "Mint",
-        quantity: 1,
-        createdAt: now,
-        updatedAt: now,
-      })
-      .returning()
-      .get();
-
-    db.insert(captureCandidateFrames)
-      .values(
-        savedBurst.candidateFrames.map((candidateFrame) => ({
-          sessionItemId: item.id,
-          ...candidateFrame,
-          createdAt: now,
-        })),
-      )
-      .run();
-    db.insert(ocrEvidence)
-      .values({
-        sessionItemId: item.id,
-        status: ocrResult.status,
-        rawText: ocrResult.rawText,
-        cardNameText: ocrResult.cardNameText,
-        cardNameConfidence: ocrResult.cardNameConfidence,
-        setCodeText: ocrResult.setCodeText,
-        setCodeConfidence: ocrResult.setCodeConfidence,
-        editionText: ocrResult.editionText,
-        editionConfidence: ocrResult.editionConfidence,
-        serialNumberText: ocrResult.serialNumberText,
-        serialNumberConfidence: ocrResult.serialNumberConfidence,
-        sourceRegions: JSON.stringify(ocrResult.sourceRegions),
-        createdAt: now,
-        updatedAt: now,
-      })
-      .run();
-
-    db.update(pricingSessions)
-      .set({
-        reviewCount: session.reviewCount + 1,
-        updatedAt: now,
-      })
-      .where(eq(pricingSessions.id, session.id))
-      .run();
+    const persisted = await persistCapturedBurst({
+      captureFingerprint,
+      now,
+      ocrResult,
+      savedBurst,
+      session,
+    });
+    const { insertedBestFrame, item } = persisted;
 
     publishSessionEvent({ sessionId: session.id, type: "item_created" });
     publishSessionEvent({ sessionId: session.id, type: "review_changed" });
@@ -195,6 +140,8 @@ export async function POST(request: Request) {
       );
     }
 
+    console.error("Capture burst upload failed", error);
+
     return NextResponse.json(
       { error: "The capture burst could not be uploaded. Try again." },
       { status: 500 },
@@ -212,4 +159,93 @@ function captureItemResponse(item: typeof sessionItems.$inferSelect) {
     quantity: item.quantity,
     reviewStatus: "requires_review" as const,
   };
+}
+
+type PersistCapturedBurstInput = {
+  captureFingerprint: string;
+  now: Date;
+  ocrResult: Awaited<ReturnType<typeof recognizeCardFrame>>;
+  savedBurst: Awaited<ReturnType<typeof saveCaptureBurst>>;
+  session: typeof pricingSessions.$inferSelect;
+};
+
+async function persistCapturedBurst({
+  captureFingerprint,
+  now,
+  ocrResult,
+  savedBurst,
+  session,
+}: PersistCapturedBurstInput) {
+  try {
+    return db.transaction((tx) => {
+      const insertedBestFrame = tx
+        .insert(bestFrames)
+        .values(savedBurst.bestFrame)
+        .returning()
+        .get();
+      const item = tx
+        .insert(sessionItems)
+        .values({
+          sessionId: session.id,
+          bestFrameId: insertedBestFrame.id,
+          captureFingerprint,
+          entrySource: "capture",
+          cardName: ocrResult.cardNameText ?? "Captured card",
+          setCode: ocrResult.setCodeText ?? "Unknown",
+          passcode: ocrResult.serialNumberText ?? "Unknown",
+          rarity: "Unknown",
+          rarityConfirmedAt: null,
+          printingIdentityTrusted: false,
+          edition: ocrResult.editionText ?? "1st Edition",
+          language: "English",
+          condition: "Mint",
+          quantity: 1,
+          createdAt: now,
+          updatedAt: now,
+        })
+        .returning()
+        .get();
+
+      tx.insert(captureCandidateFrames)
+        .values(
+          savedBurst.candidateFrames.map((candidateFrame) => ({
+            sessionItemId: item.id,
+            ...candidateFrame,
+            createdAt: now,
+          })),
+        )
+        .run();
+      tx.insert(ocrEvidence)
+        .values({
+          sessionItemId: item.id,
+          status: ocrResult.status,
+          rawText: ocrResult.rawText,
+          cardNameText: ocrResult.cardNameText,
+          cardNameConfidence: ocrResult.cardNameConfidence,
+          setCodeText: ocrResult.setCodeText,
+          setCodeConfidence: ocrResult.setCodeConfidence,
+          editionText: ocrResult.editionText,
+          editionConfidence: ocrResult.editionConfidence,
+          serialNumberText: ocrResult.serialNumberText,
+          serialNumberConfidence: ocrResult.serialNumberConfidence,
+          sourceRegions: JSON.stringify(ocrResult.sourceRegions),
+          createdAt: now,
+          updatedAt: now,
+        })
+        .run();
+
+      tx.update(pricingSessions)
+        .set({
+          reviewCount: session.reviewCount + 1,
+          updatedAt: now,
+        })
+        .where(eq(pricingSessions.id, session.id))
+        .run();
+
+      return { insertedBestFrame, item };
+    });
+  } catch (error) {
+    await rm(savedBurst.bestFrame.storagePath, { force: true });
+    throw error;
+  }
 }
