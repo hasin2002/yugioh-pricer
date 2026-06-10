@@ -5,8 +5,10 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import {
   CaptureBurstError,
+  candidateFrameMetricsFromFormData,
   saveCaptureBurst,
   selectBestCandidateFrame,
+  selectBestCandidateFrameIndex,
 } from "@/server/capture/burst";
 
 const tempDirs: string[] = [];
@@ -56,6 +58,50 @@ describe("selectBestCandidateFrame", () => {
     ];
 
     expect(selectBestCandidateFrame(frames).name).toBe("large.jpg");
+    expect(selectBestCandidateFrameIndex(frames)).toBe(1);
+  });
+});
+
+describe("candidateFrameMetricsFromFormData", () => {
+  it("normalizes optional capture quality metadata", () => {
+    const formData = new FormData();
+    formData.set(
+      "candidateFrameMetadata",
+      JSON.stringify([
+        {
+          cardLike: true,
+          brightness: 90.6,
+          signature: "  abc123  ",
+        },
+        {
+          cardLike: false,
+          brightness: -12,
+          signature: "",
+        },
+      ]),
+    );
+
+    expect(candidateFrameMetricsFromFormData(formData)).toEqual([
+      {
+        cardLike: true,
+        brightness: 91,
+        signature: "abc123",
+      },
+      {
+        cardLike: false,
+        brightness: 0,
+        signature: null,
+      },
+    ]);
+  });
+
+  it("rejects malformed capture quality metadata", () => {
+    const formData = new FormData();
+    formData.set("candidateFrameMetadata", "{not json");
+
+    expect(() => candidateFrameMetricsFromFormData(formData)).toThrow(
+      "Candidate frame metadata must be valid JSON.",
+    );
   });
 });
 
@@ -81,6 +127,65 @@ describe("saveCaptureBurst", () => {
     );
     expect(saved.bestFrame.storagePath).toBe(join(storageDir, "burst-best.jpg"));
     expect(saved.candidateFrameCount).toBe(4);
+    expect(saved.candidateFrames).toEqual([
+      expect.objectContaining({
+        position: 1,
+        selectedAsBest: false,
+        sizeBytes: 1,
+      }),
+      expect.objectContaining({
+        position: 2,
+        selectedAsBest: true,
+        sizeBytes: 3,
+      }),
+      expect.objectContaining({
+        position: 3,
+        selectedAsBest: false,
+        sizeBytes: 2,
+      }),
+      expect.objectContaining({
+        position: 4,
+        selectedAsBest: false,
+        sizeBytes: 1,
+      }),
+    ]);
+  });
+
+  it("stores client-provided candidate frame metrics with the burst", async () => {
+    const storageDir = await createTempDir();
+    const frames = [
+      new File([new Uint8Array([1])], "small.jpg", { type: "image/jpeg" }),
+      new File([new Uint8Array([1, 2, 3])], "large.jpg", {
+        type: "image/jpeg",
+      }),
+      new File([new Uint8Array([1, 2])], "medium.jpg", { type: "image/jpeg" }),
+      new File([new Uint8Array([1])], "small-2.jpg", { type: "image/jpeg" }),
+    ];
+
+    const saved = await saveCaptureBurst(frames, {
+      storageDir,
+      candidateFrameMetrics: [
+        { cardLike: true, brightness: 80, signature: "aaaa" },
+        { cardLike: true, brightness: 90, signature: "bbbb" },
+        { cardLike: false, brightness: 70, signature: "cccc" },
+        { cardLike: null, brightness: null, signature: null },
+      ],
+    });
+
+    expect(saved.candidateFrames[1]).toMatchObject({
+      position: 2,
+      selectedAsBest: true,
+      cardLike: true,
+      brightness: 90,
+      signature: "bbbb",
+    });
+    expect(saved.candidateFrames[2]).toMatchObject({
+      position: 3,
+      selectedAsBest: false,
+      cardLike: false,
+      brightness: 70,
+      signature: "cccc",
+    });
   });
 
   it("converts still-frame validation into burst upload errors", async () => {

@@ -28,7 +28,7 @@ import {
 } from "@/lib/capture-state";
 import { captureFrameQuality } from "@/lib/capture-quality";
 import {
-  isCapturedSceneResetFrame,
+  isCapturedCardPullAwayFrame,
   signatureDistance,
 } from "@/lib/capture-signature";
 import { cn } from "@/lib/utils";
@@ -63,7 +63,7 @@ const STABLE_FRAME_TARGET = 2;
 const SIGNATURE_MOVEMENT_THRESHOLD = 64;
 const CAPTURED_SCENE_CHANGE_THRESHOLD = 72;
 const MIN_USABLE_BRIGHTNESS = 18;
-const CAPTURED_RESET_FRAME_TARGET = 3;
+const CAPTURED_PULL_AWAY_FRAME_TARGET = 2;
 
 export function CaptureClient() {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -161,6 +161,7 @@ export function CaptureClient() {
         formData.set("joinCode", joinCode);
         formData.set("clientId", clientId);
         formData.set("captureFingerprint", fingerprintForFrames(frames));
+        formData.set("candidateFrameMetadata", JSON.stringify(frameMetadata(frames)));
 
         frames.forEach((frame, index) => {
           formData.append("frames", frame.blob, `candidate-${index + 1}.jpg`);
@@ -440,20 +441,19 @@ export function CaptureClient() {
 
     async function watchForCardRemoval() {
       const frame = await captureCandidateFrame(videoRef.current, canvasRef.current);
+      const cardPulledAway = isCapturedCardPullAwayFrame(
+        frame,
+        capturedSignatureRef.current,
+        CAPTURED_SCENE_CHANGE_THRESHOLD,
+      );
 
-      if (
-        isCapturedSceneResetFrame(
-          frame,
-          capturedSignatureRef.current,
-          CAPTURED_SCENE_CHANGE_THRESHOLD,
-        )
-      ) {
+      if (cardPulledAway) {
         capturedResetFrameCountRef.current += 1;
       } else {
         capturedResetFrameCountRef.current = 0;
       }
 
-      if (capturedResetFrameCountRef.current >= CAPTURED_RESET_FRAME_TARGET) {
+      if (capturedResetFrameCountRef.current >= CAPTURED_PULL_AWAY_FRAME_TARGET) {
         window.clearInterval(interval);
         resumeDetection();
       }
@@ -743,6 +743,14 @@ function fingerprintForFrames(frames: CandidateFrame[]) {
 
 function representativeSignatureForFrames(frames: CandidateFrame[]) {
   return frames[Math.floor(frames.length / 2)]?.signature ?? null;
+}
+
+function frameMetadata(frames: CandidateFrame[]) {
+  return frames.map((frame) => ({
+    cardLike: frame.cardLike,
+    brightness: frame.brightness,
+    signature: frame.signature,
+  }));
 }
 
 function canvasBlob(canvas: HTMLCanvasElement) {

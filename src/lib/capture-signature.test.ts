@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  capturedSceneResetKind,
+  isCapturedCardPullAwayFrame,
   isCapturedSceneResetFrame,
   signatureDistance,
 } from "@/lib/capture-signature";
@@ -13,12 +15,72 @@ describe("signatureDistance", () => {
   });
 });
 
+describe("capturedSceneResetKind", () => {
+  it("does not reset from missing frames or minor movement", () => {
+    expect(capturedSceneResetKind(null, "0123", 4)).toBeNull();
+    expect(
+      capturedSceneResetKind({ cardLike: true, signature: "0124" }, "0123", 4),
+    ).toBeNull();
+    expect(
+      capturedSceneResetKind({ cardLike: false, signature: "0123" }, "0123", 4),
+    ).toBeNull();
+  });
+
+  it("recognizes when the scanned card leaves the guide", () => {
+    expect(
+      capturedSceneResetKind({ cardLike: false, signature: "89ab" }, "0123", 4),
+    ).toBe("card_removed");
+  });
+
+  it("recognizes a different card revealed in the guide", () => {
+    expect(
+      capturedSceneResetKind({ cardLike: true, signature: "89ab" }, "0123", 4),
+    ).toBe("different_card");
+  });
+});
+
+describe("isCapturedCardPullAwayFrame", () => {
+  it("requires the card to leave the guide before auto scanning can resume", () => {
+    expect(
+      isCapturedCardPullAwayFrame(
+        { cardLike: false, signature: "89ab" },
+        "0123",
+        4,
+      ),
+    ).toBe(true);
+    expect(
+      isCapturedCardPullAwayFrame(
+        { cardLike: true, signature: "89ab" },
+        "0123",
+        4,
+      ),
+    ).toBe(false);
+  });
+
+  it("does not count same-card wrist movement as pull-away", () => {
+    expect(
+      isCapturedCardPullAwayFrame(
+        { cardLike: true, signature: "0124" },
+        "0123",
+        4,
+      ),
+    ).toBe(false);
+    expect(
+      isCapturedCardPullAwayFrame(
+        { cardLike: false, signature: "0123" },
+        "0123",
+        4,
+      ),
+    ).toBe(false);
+  });
+});
+
 describe("isCapturedSceneResetFrame", () => {
-  it("resets when the camera no longer sees a card-like frame", () => {
-    expect(isCapturedSceneResetFrame(null, "0123", 4)).toBe(true);
+  it("does not reset from missing frames or minor non-card-like movement", () => {
+    expect(isCapturedSceneResetFrame(null, "0123", 4)).toBe(false);
     expect(
       isCapturedSceneResetFrame({ cardLike: false, signature: "0123" }, "0123", 4),
-    ).toBe(true);
+    ).toBe(false);
   });
 
   it("keeps the captured state while the same card remains in view", () => {
@@ -27,9 +89,12 @@ describe("isCapturedSceneResetFrame", () => {
     ).toBe(false);
   });
 
-  it("resets when a different card-like scene replaces the captured card", () => {
+  it("resets when the scene changes substantially after capture", () => {
     expect(
       isCapturedSceneResetFrame({ cardLike: true, signature: "89ab" }, "0123", 4),
+    ).toBe(true);
+    expect(
+      isCapturedSceneResetFrame({ cardLike: false, signature: "89ab" }, "0123", 4),
     ).toBe(true);
   });
 });

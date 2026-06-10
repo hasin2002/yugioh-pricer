@@ -3,8 +3,10 @@ import { describe, expect, it } from "vitest";
 import {
   appMeta,
   bestFrames,
+  captureCandidateFrames,
   cardMetadataCards,
   cardMetadataPrintings,
+  ocrEvidence,
   priceSnapshots,
   pricingSessions,
   sessionItems,
@@ -50,6 +52,25 @@ describe("database schema", () => {
     expect(sessionItems.printingIdentityTrusted.name).toBe(
       "printing_identity_trusted",
     );
+  });
+
+  it("defines candidate frame metadata for captured items", () => {
+    expect(captureCandidateFrames[Symbol.for("drizzle:Name")]).toBe(
+      "capture_candidate_frames",
+    );
+    expect(captureCandidateFrames.sessionItemId.name).toBe("session_item_id");
+    expect(captureCandidateFrames.selectedAsBest.name).toBe("selected_as_best");
+    expect(captureCandidateFrames.cardLike.name).toBe("card_like");
+    expect(captureCandidateFrames.brightness.name).toBe("brightness");
+  });
+
+  it("defines OCR Evidence shell fields for captured items", () => {
+    expect(ocrEvidence[Symbol.for("drizzle:Name")]).toBe("ocr_evidence");
+    expect(ocrEvidence.sessionItemId.name).toBe("session_item_id");
+    expect(ocrEvidence.cardNameText.name).toBe("card_name_text");
+    expect(ocrEvidence.setCodeText.name).toBe("set_code_text");
+    expect(ocrEvidence.editionText.name).toBe("edition_text");
+    expect(ocrEvidence.serialNumberText.name).toBe("serial_number_text");
   });
 
   it("defines price snapshots for session items", () => {
